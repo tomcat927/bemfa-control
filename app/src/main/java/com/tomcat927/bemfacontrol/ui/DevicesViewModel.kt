@@ -1,5 +1,6 @@
 package com.tomcat927.bemfacontrol.ui
 
+import com.tomcat927.bemfacontrol.data.model.OutletDevice
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -18,6 +19,12 @@ data class DevicesUiState(
     val needsSetup: Boolean = false,
     val uid: String = "",
     val groups: List<DeviceGroup> = emptyList(),
+    val allDevices: List<OutletDevice> = emptyList(),
+    val rooms: List<String> = emptyList(),
+    val selectedRoom: String? = null,
+    val viewMode: ViewMode = ViewMode.ROOM,
+    val selectedDeviceTopic: String? = null,
+    val lastSyncTime: String? = null,
     val onlineCount: Int = 0,
     val totalCount: Int = 0,
     val pendingTopics: Set<String> = emptySet(),
@@ -25,6 +32,8 @@ data class DevicesUiState(
     val debugEnabled: Boolean = false,
     val showDebugDialog: Boolean = false,
 )
+
+enum class ViewMode { ROOM, DEVICE }
 
 class DevicesViewModel(
     private val settingsStore: AppSettingsStore,
@@ -59,9 +68,14 @@ class DevicesViewModel(
                 .onSuccess { groups ->
                     RuntimeLog.debug("sync success: ${groups.sumOf { it.devices.size }} devices")
                     _uiState.update { state ->
+                        val allDevices = groups.flatMap { it.devices }
+                        val rooms = groups.map { it.room }.distinct()
                         state.copy(
                             isLoading = false,
                             groups = groups,
+                            allDevices = allDevices,
+                            rooms = rooms,
+                            lastSyncTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date()),
                             totalCount = groups.sumOf { group -> group.devices.size },
                             onlineCount = groups.sumOf { group ->
                                 group.devices.count { device -> device.isOnline }
@@ -138,6 +152,21 @@ class DevicesViewModel(
     fun clearMessage() {
         _uiState.update { it.copy(message = null) }
     }
+
+    fun selectRoom(room: String?) {
+        _uiState.update { it.copy(selectedRoom = room) }
+    }
+
+    fun setViewMode(mode: ViewMode) {
+        _uiState.update { it.copy(viewMode = mode, selectedRoom = null) }
+    }
+
+    fun selectDevice(topic: String?) {
+        _uiState.update { it.copy(selectedDeviceTopic = topic) }
+    }
+
+    fun selectedDevice(): OutletDevice? =
+        _uiState.value.allDevices.find { it.topic == _uiState.value.selectedDeviceTopic }
 
     fun showDebugDialog(visible: Boolean) {
         _uiState.update { it.copy(showDebugDialog = visible) }
