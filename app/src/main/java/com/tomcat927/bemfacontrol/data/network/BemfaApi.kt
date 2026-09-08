@@ -1,6 +1,12 @@
 package com.tomcat927.bemfacontrol.data.network
 
 import com.tomcat927.bemfacontrol.data.model.BemfaMessageRequest
+import com.tomcat927.bemfacontrol.data.model.BemfaNameRequest
+import com.tomcat927.bemfacontrol.data.model.BemfaChangeRoomRequest
+import com.tomcat927.bemfacontrol.data.model.BemfaRoomList
+import com.tomcat927.bemfacontrol.data.model.BemfaTimerList
+import com.tomcat927.bemfacontrol.data.model.BemfaTimerRequest
+import com.tomcat927.bemfacontrol.data.model.BemfaTimerToggleRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaResponse
 import com.tomcat927.bemfacontrol.data.model.BemfaTopic
 import com.tomcat927.bemfacontrol.data.model.BemfaTopicList
