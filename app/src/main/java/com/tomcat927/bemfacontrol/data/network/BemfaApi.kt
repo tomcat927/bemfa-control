@@ -45,7 +45,7 @@ interface BemfaApi {
     @POST("va/modifyName")
     suspend fun modifyName(
         @Body request: BemfaNameRequest,
-    ): BemfaActionResponse
+    ): BemfaResponse<Int>
 
     @GET("vb/api/v1/allRoom")
     suspend fun allRooms(
