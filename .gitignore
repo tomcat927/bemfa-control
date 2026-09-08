@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+*.jks
+*.keystore
+*.apk
+*.aab
+
+# Local working area and generated assets
+/node_modules/
+/work/
+/outputs/
