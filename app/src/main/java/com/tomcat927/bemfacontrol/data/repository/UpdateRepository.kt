@@ -1,5 +1,7 @@
 package com.tomcat927.bemfacontrol.data.repository
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -56,7 +58,7 @@ class UpdateRepository(
         releaseInfo: ReleaseInfo,
         useProxy: Boolean,
         onProgress: (Float) -> Unit,
-    ): Boolean {
+    ): Boolean = withContext(Dispatchers.IO) {
         val url = if (useProxy) releaseInfo.proxyUrl else releaseInfo.downloadUrl
         RuntimeLog.debug("update: downloading from $useProxy")
 
