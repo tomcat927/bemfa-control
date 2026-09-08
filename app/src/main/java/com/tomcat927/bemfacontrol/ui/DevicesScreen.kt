@@ -3,33 +3,53 @@ package com.tomcat927.bemfacontrol.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,22 +62,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tomcat927.bemfacontrol.data.model.DeviceGroup
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
-import androidx.compose.ui.platform.LocalContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DevicesScreen(viewModel: DevicesViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val clipboard = LocalContext.current.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val context = LocalContext.current
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     LaunchedEffect(state.message) {
         state.message?.let { message ->
@@ -71,6 +95,14 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
             TopAppBar(
                 title = { Text("巴法智控") },
                 actions = {
+                    if (state.lastSyncTime != null) {
+                        Text(
+                            text = state.lastSyncTime!!,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                    }
                     TextButton(onClick = { viewModel.showDebugDialog(true) }) {
                         Text(
                             text = "日志",
@@ -100,10 +132,27 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onConfigure = viewModel::configureUid,
                 )
 
+                state.selectedDeviceTopic != null -> DeviceDetailContent(
+                    device = viewModel.selectedDevice(),
+                    onDismiss = { viewModel.selectDevice(null) },
+                    onToggle = viewModel::setPower,
+                    onCopyTopic = { topic ->
+                        clipboard.setPrimaryClip(ClipData.newPlainText("topic", topic))
+                        Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
+                    },
+                )
+
                 else -> DeviceListContent(
                     state = state,
                     onToggle = viewModel::setPower,
                     onRefresh = viewModel::refresh,
+                    onSelectRoom = viewModel::selectRoom,
+                    onViewModeChange = viewModel::setViewMode,
+                    onDeviceClick = viewModel::selectDevice,
+                    onCopyTopic = { topic ->
+                        clipboard.setPrimaryClip(ClipData.newPlainText("topic", topic))
+                        Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
+                    },
                 )
             }
 
@@ -120,6 +169,343 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun DeviceListContent(
+    state: DevicesUiState,
+    onToggle: (String, Boolean) -> Unit,
+    onRefresh: () -> Unit,
+    onSelectRoom: (String?) -> Unit,
+    onViewModeChange: (ViewMode) -> Unit,
+    onDeviceClick: (String) -> Unit,
+    onCopyTopic: (String) -> Unit,
+) {
+    val displayDevices = when {
+        state.viewMode == ViewMode.DEVICE -> state.allDevices
+        state.selectedRoom != null -> state.allDevices.filter { it.room == state.selectedRoom }
+        else -> state.allDevices
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (state.isLoading) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+
+        // Stats bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "共 ${state.totalCount} 个 · 在线 ${state.onlineCount}",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            TextButton(onClick = onRefresh, enabled = !state.isLoading) {
+                Text("同步")
+            }
+        }
+
+        // View mode segmented buttons
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        ) {
+            SegmentedButton(
+                selected = state.viewMode == ViewMode.ROOM,
+                onClick = { onViewModeChange(ViewMode.ROOM) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            ) {
+                Text("房间")
+            }
+            SegmentedButton(
+                selected = state.viewMode == ViewMode.DEVICE,
+                onClick = { onViewModeChange(ViewMode.DEVICE) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            ) {
+                Text("设备")
+            }
+        }
+
+        // Room filter row (only in ROOM mode)
+        if (state.viewMode == ViewMode.ROOM && state.rooms.isNotEmpty()) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item {
+                    FilterChip(
+                        selected = state.selectedRoom == null,
+                        onClick = { onSelectRoom(null) },
+                        label = { Text("全部") },
+                    )
+                }
+                items(state.rooms, key = { it }) { room ->
+                    FilterChip(
+                        selected = state.selectedRoom == room,
+                        onClick = { onSelectRoom(room) },
+                        label = { Text(room) },
+                    )
+                }
+            }
+        }
+
+        if (displayDevices.isEmpty()) {
+            EmptyContent(isLoading = state.isLoading)
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(displayDevices, key = { it.topic }) { device ->
+                    OutletGridCard(
+                        device = device,
+                        isPending = device.topic in state.pendingTopics,
+                        onToggle = onToggle,
+                        onClick = { onDeviceClick(device.topic) },
+                        onLongPress = { onCopyTopic(device.topic) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OutletGridCard(
+    device: OutletDevice,
+    isPending: Boolean,
+    onToggle: (String, Boolean) -> Unit,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // Name - up to 2 lines, no truncation
+            Text(
+                text = device.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Topic - full display, small monospace
+            Text(
+                text = device.topic,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+            )
+
+            // Status + time row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val statusText = when {
+                    isPending -> "处理中"
+                    !device.isOnline -> "离线"
+                    device.isOn -> "开启"
+                    else -> "关闭"
+                }
+                val statusColor = when {
+                    !device.isOnline -> MaterialTheme.colorScheme.error
+                    device.isOn -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
+                )
+                device.lastMessageTime?.let { time ->
+                    val timeOnly = time.substringAfter(' ').take(5)
+                    Text(
+                        text = "  $timeOnly",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Circular power button
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (device.isOn && device.isOnline && !isPending) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            Color.Transparent
+                        }
+                    )
+                    .border(
+                        width = 2.dp,
+                        color = when {
+                            !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
+                            device.isOn -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.outline
+                        },
+                        shape = CircleShape,
+                    )
+                    .clickable(enabled = !isPending && device.isOnline) {
+                        onToggle(device.topic, !device.isOn)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isPending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.PowerSettingsNew,
+                        contentDescription = "电源",
+                        tint = when {
+                            !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
+                            device.isOn -> MaterialTheme.colorScheme.onPrimary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeviceDetailContent(
+    device: OutletDevice?,
+    onDismiss: () -> Unit,
+    onToggle: (String, Boolean) -> Unit,
+    onCopyTopic: (String) -> Unit,
+) {
+    if (device == null) {
+        onDismiss()
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = device.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DetailRow("Topic", device.topic, onCopyTopic)
+                DetailText("房间", device.room)
+                DetailText("在线状态", if (device.isOnline) "在线" else "离线")
+                DetailText("当前状态", if (device.isOn) "开启" else "关闭")
+                DetailText("最近消息", device.lastMessageTime ?: "无")
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+                Button(
+                    onClick = {
+                        onToggle(device.topic, !device.isOn)
+                        onDismiss()
+                    },
+                    enabled = device.isOnline,
+                ) {
+                    Text(if (device.isOn) "关闭插座" else "开启插座")
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    onCopy: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        TextButton(onClick = { onCopy(value) }) {
+            Text("复制")
+        }
+    }
+}
+
+@Composable
+private fun DetailText(label: String, value: String) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -237,131 +623,6 @@ private fun SetupContent(
         if (isLoading) {
             Spacer(modifier = Modifier.height(16.dp))
             CircularProgressIndicator()
-        }
-    }
-}
-
-@Composable
-private fun DeviceListContent(
-    state: DevicesUiState,
-    onToggle: (String, Boolean) -> Unit,
-    onRefresh: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (state.isLoading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "共 ${state.totalCount} 个插座 · 在线 ${state.onlineCount}",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            TextButton(onClick = onRefresh, enabled = !state.isLoading) {
-                Text("同步")
-            }
-        }
-
-        if (state.groups.isEmpty()) {
-            EmptyContent(isLoading = state.isLoading)
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                state.groups.forEach { group ->
-                    item(key = "room-${group.room}") {
-                        RoomHeader(group = group)
-                    }
-                    items(group.devices, key = { device -> device.topic }) { device ->
-                        OutletCard(
-                            device = device,
-                            isPending = device.topic in state.pendingTopics,
-                            onToggle = onToggle,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RoomHeader(group: DeviceGroup) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = group.room,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = "${group.devices.size} 个设备",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun OutletCard(
-    device: OutletDevice,
-    isPending: Boolean,
-    onToggle: (String, Boolean) -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = device.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = device.topic,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = when {
-                        isPending -> "指令处理中"
-                        !device.isOnline -> "离线"
-                        device.isOn -> "开启"
-                        else -> "关闭"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (!device.isOnline) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-
-            if (isPending) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
-                    strokeWidth = 3.dp,
-                )
-            } else {
-                Switch(
-                    checked = device.isOn,
-                    onCheckedChange = { checked -> onToggle(device.topic, checked) },
-                )
-            }
         }
     }
 }
