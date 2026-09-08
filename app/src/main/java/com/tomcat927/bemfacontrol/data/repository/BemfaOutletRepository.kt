@@ -38,7 +38,6 @@ class BemfaOutletRepository(
     suspend fun groups(uid: String): List<DeviceGroup> =
         OutletMapper.groupByRoom(outlets(uid))
 
-    suspend fun setPower(uid: String, topic: String, on: Boolean) {
     suspend fun checkOnline(uid: String, topic: String): Boolean {
         val startedAt = System.currentTimeMillis()
         try {
