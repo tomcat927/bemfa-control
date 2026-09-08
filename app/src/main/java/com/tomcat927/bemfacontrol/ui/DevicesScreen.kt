@@ -49,6 +49,7 @@ import androidx.compose.material3.Card
 import com.tomcat927.bemfacontrol.data.model.BemfaRoom
 import com.tomcat927.bemfacontrol.data.model.BemfaTimer
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -377,11 +378,16 @@ private fun TimerPage(
                     IconButton(onClick = onRefresh, enabled = !loading) {
                         Icon(Icons.Filled.Refresh, contentDescription = "刷新")
                     }
-                    TextButton(onClick = { showAddDialog = true }) {
-                        Text("添加")
-                    }
                 },
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "添加定时任务")
+            }
         },
     ) { padding ->
         if (loading) {
