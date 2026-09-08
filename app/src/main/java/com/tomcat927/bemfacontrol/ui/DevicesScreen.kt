@@ -281,6 +281,7 @@ private fun DeviceListContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OutletGridCard(
     device: OutletDevice,
