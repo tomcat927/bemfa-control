@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.tomcat927.bemfacontrol.data.model.GitHubRelease
+import com.tomcat927.bemfacontrol.BuildConfig
 import com.tomcat927.bemfacontrol.data.model.ReleaseInfo
 import com.tomcat927.bemfacontrol.data.network.GitHubApi
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
@@ -18,7 +19,7 @@ class UpdateRepository(
     private val api: GitHubApi,
 ) {
 
-    suspend fun checkForUpdate(currentVersionCode: Int): ReleaseInfo? {
+    suspend fun checkForUpdate(currentVersionName: String): ReleaseInfo? {
         val startedAt = System.currentTimeMillis()
         try {
             val release = api.latestRelease()
@@ -31,14 +32,13 @@ class UpdateRepository(
             }
 
             // Parse versionCode from tag: v2026.09.08.2020 -> hash of digits
-            val tagVersionCode = parseVersionCode(tagName)
-            val isNewer = tagVersionCode > currentVersionCode
+            val isNewer = tagName != currentVersionName
 
             val githubUrl = apkAsset.browserDownloadUrl
             val proxyUrl = "https://gh-proxy.com/$githubUrl"
             val sha256Url = shaAsset?.browserDownloadUrl ?: ""
 
-            RuntimeLog.debug("update: latest=$tagName current=$currentVersionCode isNewer=$isNewer in ${System.currentTimeMillis() - startedAt}ms")
+            RuntimeLog.debug("update: latest=$tagName current=$currentVersionName isNewer=$isNewer in ${System.currentTimeMillis() - startedAt}ms")
 
             return ReleaseInfo(
                 versionName = tagName,
@@ -116,21 +116,6 @@ class UpdateRepository(
             return@withContext false
         }
         }
-    }
-
-    private fun parseVersionCode(tagName: String): Int {
-        // Use BuildConfig.versionCode, but for comparison use a simple hash
-        // Since tag format is like 2026.09.08.2020, we can't use it as versionCode directly
-        // We'll compare by parsing and computing a comparable int
-        val parts = tagName.split(".")
-        if (parts.size >= 3) {
-            val year = parts[0].takeLast(2).toIntOrNull() ?: 0
-            val month = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            val day = parts.getOrNull(2)?.toIntOrNull() ?: 0
-            val time = parts.getOrNull(3)?.toIntOrNull() ?: 0
-            return year * 1000000 + month * 10000 + day * 100 + (time % 100)
-        }
-        return 0
     }
 
     private fun sha256(file: File): String {
