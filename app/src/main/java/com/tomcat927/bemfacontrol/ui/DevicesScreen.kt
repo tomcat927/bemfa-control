@@ -33,14 +33,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -134,12 +139,14 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
 
                 state.selectedDeviceTopic != null -> DeviceDetailContent(
                     device = viewModel.selectedDevice(),
+                    detailLoading = state.detailLoading,
                     onDismiss = { viewModel.selectDevice(null) },
                     onToggle = viewModel::setPower,
                     onCopyTopic = { topic ->
                         clipboard.setPrimaryClip(ClipData.newPlainText("topic", topic))
                         Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
                     },
+                    onRefresh = viewModel::refreshDeviceDetail,
                 )
 
                 else -> DeviceListContent(
@@ -424,46 +431,127 @@ private fun DeviceDetailContent(
         return
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = device.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(device.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onRefresh, enabled = !detailLoading) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "刷新",
+                        )
+                    }
+                },
             )
         },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DetailRow("Topic", device.topic, onCopyTopic)
-                DetailText("房间", device.room)
-                DetailText("在线状态", if (device.isOnline) "在线" else "离线")
-                DetailText("当前状态", if (device.isOn) "开启" else "关闭")
-                DetailText("最近消息", device.lastMessageTime ?: "无")
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss) {
-                    Text("关闭")
-                }
-                Button(
-                    onClick = {
-                        onToggle(device.topic, !device.isOn)
-                        onDismiss()
-                    },
-                    enabled = device.isOnline,
+    ) { padding ->
+        if (detailLoading) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = device.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(if (device.isOn) "关闭插座" else "开启插座")
+                    Text(
+                        text = device.topic,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { onCopyTopic(device.topic) }) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = "复制",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-        },
-    )
+            HorizontalDivider()
+            DetailText("房间", device.room)
+            DetailText("在线状态", if (device.isOnline) "在线" else "离线")
+            DetailText("当前状态", if (device.isOn) "开启" else "关闭")
+            DetailText("最近消息时间", device.lastMessageTime ?: "无")
+            HorizontalDivider()
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (device.isOn && device.isOnline) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.Transparent
+                            }
+                        )
+                        .border(
+                            width = 2.dp,
+                            color = when {
+                                !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
+                                device.isOn -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.outline
+                            },
+                            shape = CircleShape,
+                        )
+                        .clickable(enabled = device.isOnline) {
+                            onToggle(device.topic, !device.isOn)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PowerSettingsNew,
+                        contentDescription = "电源",
+                        tint = when {
+                            !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
+                            device.isOn -> MaterialTheme.colorScheme.onPrimary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
+            Text(
+                text = if (!device.isOnline) "设备离线" else if (device.isOn) "已开启" else "已关闭",
+                style = MaterialTheme.typography.bodyLarge,
+                color = when {
+                    !device.isOnline -> MaterialTheme.colorScheme.error
+                    device.isOn -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
 }
 
 @Composable

@@ -27,6 +27,13 @@ interface BemfaApi {
     suspend fun postMessage(
         @Body request: BemfaMessageRequest,
     ): BemfaResponse<Int>
+
+    @GET("va/online")
+    suspend fun checkOnline(
+        @Query("uid") uid: String,
+        @Query("topic") topic: String,
+        @Query("type") type: Int,
+    ): BemfaResponse<Boolean>
 }
 
 object BemfaApiFactory {
