@@ -518,6 +518,7 @@ private fun DebugDialog(
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val logs by RuntimeLog.entries.collectAsStateWithLifecycle()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("调试日志") },
@@ -535,7 +536,6 @@ private fun DebugDialog(
                     text = "开启后记录接口调用、错误和异常摘要。日志不会包含 UID。",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                val logs = RuntimeLog.snapshot()
                 if (logs.isEmpty()) {
                     Text("暂无日志")
                 } else {
