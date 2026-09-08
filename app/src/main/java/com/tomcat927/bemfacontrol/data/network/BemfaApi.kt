@@ -34,6 +34,49 @@ interface BemfaApi {
         @Query("topic") topic: String,
         @Query("type") type: Int,
     ): BemfaResponse<Boolean>
+
+    @POST("va/modifyName")
+    suspend fun modifyName(
+        @Body request: BemfaNameRequest,
+    ): BemfaResponse<Int>
+
+    @GET("vb/api/v1/allRoom")
+    suspend fun allRooms(
+        @Query("openID") uid: String,
+        @Query("type") type: Int,
+    ): BemfaResponse<BemfaRoomList>
+
+    @POST("vb/api/v1/changeTopicRoom")
+    suspend fun changeTopicRoom(
+        @Body request: BemfaChangeRoomRequest,
+    ): BemfaResponse<Int>
+
+    @GET("vb/delay/v1/timeList")
+    suspend fun timerList(
+        @Query("openID") uid: String,
+        @Query("topicID") topic: String,
+        @Query("type") type: Int,
+    ): BemfaResponse<BemfaTimerList>
+
+    @POST("vb/delay/v1/addTime")
+    suspend fun addTimer(
+        @Body request: BemfaTimerRequest,
+    ): BemfaResponse<Int>
+
+    @POST("vb/delay/v1/enableTime")
+    suspend fun enableTimer(
+        @Body request: BemfaTimerToggleRequest,
+    ): BemfaResponse<Int>
+
+    @POST("vb/delay/v1/disableTime")
+    suspend fun disableTimer(
+        @Body request: BemfaTimerToggleRequest,
+    ): BemfaResponse<Int>
+
+    @POST("vb/delay/v1/deleteTime")
+    suspend fun deleteTimer(
+        @Body request: BemfaTimerToggleRequest,
+    ): BemfaResponse<Int>
 }
 
 object BemfaApiFactory {

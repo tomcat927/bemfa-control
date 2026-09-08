@@ -1,6 +1,8 @@
 package com.tomcat927.bemfacontrol.ui
 
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
+import com.tomcat927.bemfacontrol.data.model.BemfaRoom
+import com.tomcat927.bemfacontrol.data.model.BemfaTimer
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -42,6 +44,13 @@ data class DevicesUiState(
     val updateInfo: ReleaseInfo? = null,
     val updateDownloading: Boolean = false,
     val updateDownloadProgress: Float = 0f,
+    val editingName: Boolean = false,
+    val movingRoom: Boolean = false,
+    val roomList: List<BemfaRoom> = emptyList(),
+    val showTimerPage: Boolean = false,
+    val timerList: List<BemfaTimer> = emptyList(),
+    val timerLoading: Boolean = false,
+    val addingTimer: Boolean = false,
 )
 
 enum class ViewMode { ROOM, DEVICE }
@@ -276,6 +285,142 @@ class DevicesViewModel(
 
     fun dismissUpdateInfo() {
         _uiState.update { it.copy(updateInfo = null) }
+    }
+
+    fun editDeviceName(topic: String, newName: String) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(editingName = false) }
+            runCatching { outletRepository.modifyName(uid, topic, newName) }
+                .onSuccess {
+                    RuntimeLog.info("editDeviceName success: topic=$topic")
+                    _uiState.update { it.copy(message = "昵称已更新") }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("editDeviceName failed", throwable)
+                    _uiState.update { it.copy(message = throwable.message ?: "修改昵称失败") }
+                }
+        }
+    }
+
+    fun showEditNameDialog(visible: Boolean) {
+        _uiState.update { it.copy(editingName = visible) }
+    }
+
+    fun showMoveRoomDialog(visible: Boolean) {
+        _uiState.update { it.copy(movingRoom = visible) }
+        if (visible) loadRooms()
+    }
+
+    private fun loadRooms() {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        viewModelScope.launch {
+            runCatching { outletRepository.rooms(uid) }
+                .onSuccess { rooms ->
+                    _uiState.update { it.copy(roomList = rooms) }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("loadRooms failed", throwable)
+                }
+        }
+    }
+
+    fun moveDeviceToRoom(topic: String, newRoom: String) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(movingRoom = false) }
+            runCatching { outletRepository.changeRoom(uid, topic, newRoom) }
+                .onSuccess {
+                    RuntimeLog.info("moveDeviceToRoom success: topic=$topic room=$newRoom")
+                    _uiState.update { it.copy(message = "房间已更新") }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("moveDeviceToRoom failed", throwable)
+                    _uiState.update { it.copy(message = throwable.message ?: "移动房间失败") }
+                }
+        }
+    }
+
+    fun showTimerPage(visible: Boolean) {
+        _uiState.update { it.copy(showTimerPage = visible) }
+        if (visible) loadTimers()
+    }
+
+    private fun loadTimers() {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(timerLoading = true) }
+            runCatching { outletRepository.timers(uid, topic) }
+                .onSuccess { timers ->
+                    _uiState.update { it.copy(timerList = timers, timerLoading = false) }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("loadTimers failed", throwable)
+                    _uiState.update { it.copy(timerLoading = false, timerList = emptyList()) }
+                }
+        }
+    }
+
+    fun refreshTimers() = loadTimers()
+
+    fun addTimer(time: String, msg: String, week: List<Int>) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(addingTimer = true) }
+            runCatching { outletRepository.addTimer(uid, topic, time, msg, week) }
+                .onSuccess {
+                    RuntimeLog.info("addTimer success: topic=$topic time=$time")
+                    _uiState.update { it.copy(addingTimer = false, message = "定时任务已添加") }
+                    loadTimers()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("addTimer failed", throwable)
+                    _uiState.update { it.copy(addingTimer = false, message = throwable.message ?: "添加定时任务失败") }
+                }
+        }
+    }
+
+    fun toggleTimer(timerId: Int, enable: Boolean) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            runCatching { outletRepository.toggleTimer(uid, topic, timerId, enable) }
+                .onSuccess {
+                    RuntimeLog.debug("toggleTimer: id=$timerId enable=$enable")
+                    loadTimers()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("toggleTimer failed", throwable)
+                    _uiState.update { it.copy(message = throwable.message ?: "操作失败") }
+                }
+        }
+    }
+
+    fun deleteTimer(timerId: Int) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            runCatching { outletRepository.deleteTimer(uid, topic, timerId) }
+                .onSuccess {
+                    RuntimeLog.debug("deleteTimer: id=$timerId")
+                    loadTimers()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("deleteTimer failed", throwable)
+                    _uiState.update { it.copy(message = throwable.message ?: "删除失败") }
+                }
+        }
     }
 
     private fun updateLocalPower(topic: String, on: Boolean) {
