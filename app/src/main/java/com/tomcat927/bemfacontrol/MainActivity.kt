@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
                     factory = DevicesViewModel.Factory(
                         settingsStore = container.settingsStore,
                         outletRepository = container.outletRepository,
+                        updateRepository = container.updateRepository,
                     ),
                 )
                 DevicesScreen(viewModel = viewModel)
