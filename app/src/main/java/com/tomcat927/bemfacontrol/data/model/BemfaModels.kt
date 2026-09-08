@@ -20,6 +20,19 @@ data class BemfaResponse<T>(
     val data: T? = null,
 )
 
+@Serializable
+data class BemfaActionResponse(
+    val code: Int = -1,
+    val message: String? = null,
+    val msg: String? = null,
+    val data: BemfaActionCode? = null,
+)
+
+@Serializable
+data class BemfaActionCode(
+    val code: Int = 0,
+)
+
 @Serializable(with = BemfaTopicListSerializer::class)
 data class BemfaTopicList(
     val topics: List<BemfaTopic> = emptyList(),
@@ -184,3 +197,7 @@ data class BemfaTimerToggleRequest(
     val type: Int = 3,
     val id: Int,
 )
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonInt

@@ -1,6 +1,7 @@
 package com.tomcat927.bemfacontrol.data.network
 
 import com.tomcat927.bemfacontrol.data.model.BemfaMessageRequest
+import com.tomcat927.bemfacontrol.data.model.BemfaActionResponse
 import com.tomcat927.bemfacontrol.data.model.BemfaNameRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaChangeRoomRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaRoomList
@@ -44,7 +45,7 @@ interface BemfaApi {
     @POST("va/modifyName")
     suspend fun modifyName(
         @Body request: BemfaNameRequest,
-    ): BemfaResponse<Int>
+    ): BemfaActionResponse
 
     @GET("vb/api/v1/allRoom")
     suspend fun allRooms(
@@ -55,7 +56,7 @@ interface BemfaApi {
     @POST("vb/api/v1/changeTopicRoom")
     suspend fun changeTopicRoom(
         @Body request: BemfaChangeRoomRequest,
-    ): BemfaResponse<Int>
+    ): BemfaActionResponse
 
     @GET("vb/delay/v1/timeList")
     suspend fun timerList(
@@ -67,22 +68,22 @@ interface BemfaApi {
     @POST("vb/delay/v1/addTime")
     suspend fun addTimer(
         @Body request: BemfaTimerRequest,
-    ): BemfaResponse<Int>
+    ): BemfaActionResponse
 
     @POST("vb/delay/v1/enableTime")
     suspend fun enableTimer(
         @Body request: BemfaTimerToggleRequest,
-    ): BemfaResponse<Int>
+    ): BemfaActionResponse
 
     @POST("vb/delay/v1/disableTime")
     suspend fun disableTimer(
         @Body request: BemfaTimerToggleRequest,
-    ): BemfaResponse<Int>
+    ): BemfaActionResponse
 
     @POST("vb/delay/v1/deleteTime")
     suspend fun deleteTimer(
         @Body request: BemfaTimerToggleRequest,
-    ): BemfaResponse<Int>
+    ): BemfaActionResponse
 }
 
 object BemfaApiFactory {
