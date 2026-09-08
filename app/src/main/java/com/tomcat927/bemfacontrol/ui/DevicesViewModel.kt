@@ -1,5 +1,6 @@
 package com.tomcat927.bemfacontrol.ui
 
+import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -21,6 +22,8 @@ data class DevicesUiState(
     val totalCount: Int = 0,
     val pendingTopics: Set<String> = emptySet(),
     val message: String? = null,
+    val debugEnabled: Boolean = false,
+    val showDebugDialog: Boolean = false,
 )
 
 class DevicesViewModel(
@@ -32,6 +35,11 @@ class DevicesViewModel(
     val uiState: StateFlow<DevicesUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            val enabled = settingsStore.debugLogging()
+            RuntimeLog.enabled = enabled
+            _uiState.update { it.copy(debugEnabled = enabled) }
+        }
         refresh()
     }
 
@@ -49,6 +57,7 @@ class DevicesViewModel(
             _uiState.update { it.copy(needsSetup = false, uid = uid) }
             runCatching { outletRepository.groups(uid) }
                 .onSuccess { groups ->
+                    RuntimeLog.debug("sync success: ${groups.sumOf { it.devices.size }} devices")
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
@@ -62,6 +71,7 @@ class DevicesViewModel(
                     }
                 }
                 .onFailure { throwable ->
+                    RuntimeLog.error("sync failed", throwable)
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
@@ -83,10 +93,12 @@ class DevicesViewModel(
             _uiState.update { it.copy(isLoading = true, message = null) }
             runCatching { settingsStore.setUid(trimmed) }
                 .onSuccess {
+                    RuntimeLog.info("configureUid: saved UID")
                     _uiState.update { state -> state.copy(uid = trimmed, needsSetup = false) }
                     refresh()
                 }
                 .onFailure { throwable ->
+                    RuntimeLog.error("configureUid: save failed", throwable)
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
@@ -107,10 +119,12 @@ class DevicesViewModel(
             }
             runCatching { outletRepository.setPower(uid, topic, on) }
                 .onSuccess {
+                    RuntimeLog.debug("setPower sent: topic=$topic")
                     updateLocalPower(topic, on)
                     refresh()
                 }
                 .onFailure { throwable ->
+                    RuntimeLog.error("setPower request failed: topic=$topic", throwable)
                     _uiState.update { state ->
                         state.copy(
                             pendingTopics = state.pendingTopics - topic,
@@ -123,6 +137,30 @@ class DevicesViewModel(
 
     fun clearMessage() {
         _uiState.update { it.copy(message = null) }
+    }
+
+    fun showDebugDialog(visible: Boolean) {
+        _uiState.update { it.copy(showDebugDialog = visible) }
+    }
+
+    fun setDebugLogging(enabled: Boolean) {
+        viewModelScope.launch {
+            runCatching { settingsStore.setDebugLogging(enabled) }
+                .onSuccess {
+                    RuntimeLog.enabled = enabled
+                    if (enabled) RuntimeLog.info("debug logging enabled")
+                    _uiState.update { it.copy(debugEnabled = enabled) }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("debug logging save failed", throwable)
+                    _uiState.update { it.copy(message = "保存日志设置失败") }
+                }
+        }
+    }
+
+    fun clearLogs() {
+        RuntimeLog.clear()
+        _uiState.update { it.copy(showDebugDialog = true) }
     }
 
     private fun updateLocalPower(topic: String, on: Boolean) {

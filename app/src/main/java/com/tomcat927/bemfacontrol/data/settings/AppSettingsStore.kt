@@ -2,6 +2,7 @@ package com.tomcat927.bemfacontrol.data.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -13,11 +14,22 @@ private val Context.settingsDataStore by preferencesDataStore(name = "app_settin
 class AppSettingsStore(private val context: Context) {
 
     private val uidKey = stringPreferencesKey("bemfa_uid")
+    private val debugLoggingKey = booleanPreferencesKey("debug_logging")
 
     fun uidFlow(): Flow<String> =
         context.settingsDataStore.data.map { preferences -> preferences[uidKey].orEmpty() }
 
     suspend fun uid(): String = uidFlow().first()
+    fun debugLoggingFlow(): Flow<Boolean> =
+        context.settingsDataStore.data.map { preferences -> preferences[debugLoggingKey] ?: false }
+
+    suspend fun debugLogging(): Boolean = debugLoggingFlow().first()
+
+    suspend fun setDebugLogging(value: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[debugLoggingKey] = value
+        }
+    }
 
     suspend fun setUid(value: String) {
         context.settingsDataStore.edit { preferences ->

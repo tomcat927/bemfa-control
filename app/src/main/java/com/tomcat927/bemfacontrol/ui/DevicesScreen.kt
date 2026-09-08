@@ -1,11 +1,17 @@
 package com.tomcat927.bemfacontrol.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,12 +49,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tomcat927.bemfacontrol.data.model.DeviceGroup
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
+import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(viewModel: DevicesViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboard = LocalContext.current.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     LaunchedEffect(state.message) {
         state.message?.let { message ->
@@ -61,6 +71,16 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
             TopAppBar(
                 title = { Text("巴法智控") },
                 actions = {
+                    TextButton(onClick = { viewModel.showDebugDialog(true) }) {
+                        Text(
+                            text = "日志",
+                            color = if (state.debugEnabled) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                     TextButton(onClick = viewModel::refresh) {
                         Text("刷新")
                     }
@@ -86,8 +106,90 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onRefresh = viewModel::refresh,
                 )
             }
+
+            if (state.showDebugDialog) {
+                DebugDialog(
+                    enabled = state.debugEnabled,
+                    onEnabledChange = viewModel::setDebugLogging,
+                    onCopy = {
+                        val text = RuntimeLog.snapshot().joinToString(separator = "\n")
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Bemfa Runtime Logs", text))
+                    },
+                    onClear = viewModel::clearLogs,
+                    onDismiss = { viewModel.showDebugDialog(false) },
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun DebugDialog(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onCopy: () -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("调试日志") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(if (enabled) "已开启" else "已关闭")
+                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                }
+                Text(
+                    text = "开启后记录接口调用、错误和异常摘要。日志不会包含 UID。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                val logs = RuntimeLog.snapshot()
+                if (logs.isEmpty()) {
+                    Text("暂无日志")
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        logs.forEach { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onCopy()
+                    onDismiss()
+                },
+            ) {
+                Text("复制日志")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onClear) {
+                    Text("清空")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+            }
+        },
+    )
 }
 
 @Composable

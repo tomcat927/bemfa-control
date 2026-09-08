@@ -3,6 +3,7 @@ package com.tomcat927.bemfacontrol.data.network
 import com.tomcat927.bemfacontrol.data.model.BemfaMessageRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaResponse
 import com.tomcat927.bemfacontrol.data.model.BemfaTopic
+import com.tomcat927.bemfacontrol.data.model.BemfaTopicList
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -21,6 +22,7 @@ interface BemfaApi {
         @Query("openID") uid: String,
         @Query("type") type: Int,
     ): BemfaResponse<List<BemfaTopic>>
+    ): BemfaResponse<BemfaTopicList>
 
     @POST("va/postJsonMsg")
     suspend fun postMessage(
