@@ -263,7 +263,7 @@ class DevicesViewModel(
     fun checkForUpdate() {
         viewModelScope.launch {
             _uiState.update { it.copy(updateChecking = true) }
-            val info = updateRepository.checkForUpdate(BuildConfig.VERSION_CODE)
+            val info = updateRepository.checkForUpdate(BuildConfig.VERSION_NAME)
             _uiState.update { it.copy(updateChecking = false, updateInfo = info) }
         }
     }
