@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
@@ -118,6 +119,12 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                             },
                         )
                     }
+                    IconButton(onClick = { viewModel.showSettings(true) }) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "设置",
+                        )
+                    }
                     TextButton(onClick = viewModel::refresh) {
                         Text("刷新")
                     }
@@ -173,6 +180,18 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     },
                     onClear = viewModel::clearLogs,
                     onDismiss = { viewModel.showDebugDialog(false) },
+                )
+            }
+
+            if (state.showSettings) {
+                SettingsScreen(
+                    state = state,
+                    onDismiss = { viewModel.showSettings(false) },
+                    onAutoUpdateChange = viewModel::setAutoUpdate,
+                    onProxyFirstChange = viewModel::setProxyFirst,
+                    onCheckUpdate = viewModel::checkForUpdate,
+                    onDownloadUpdate = viewModel::downloadAndInstallUpdate,
+                    onDismissUpdate = viewModel::dismissUpdateInfo,
                 )
             }
         }
@@ -552,6 +571,142 @@ private fun DeviceDetailContent(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(
+    state: DevicesUiState,
+    onDismiss: () -> Unit,
+    onAutoUpdateChange: (Boolean) -> Unit,
+    onProxyFirstChange: (Boolean) -> Unit,
+    onCheckUpdate: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("设置") },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                        )
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Text("更新", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            }
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("启动时检查更新")
+                            Switch(checked = state.autoUpdate, onCheckedChange = onAutoUpdateChange)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("加速下载优先")
+                            Switch(checked = state.proxyFirst, onCheckedChange = onProxyFirstChange)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onCheckUpdate,
+                            enabled = !state.updateChecking,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (state.updateChecking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Text("检查更新")
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("当前版本", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = com.tomcat927.bemfacontrol.BuildConfig.VERSION_NAME,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("项目地址", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = "github.com/tomcat927/bemfa-control",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (state.updateInfo != null) {
+            AlertDialog(
+                onDismissRequest = onDismissUpdate,
+                title = { Text("发现新版本") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = state.updateInfo!!.versionName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = state.updateInfo!!.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = onDownloadUpdate,
+                        enabled = !state.updateDownloading,
+                    ) {
+                        if (state.updateDownloading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("下载并安装")
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismissUpdate) {
+                        Text("稍后")
+                    }
+                },
             )
         }
     }

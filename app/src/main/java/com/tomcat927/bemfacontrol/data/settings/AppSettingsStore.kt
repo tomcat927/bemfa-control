@@ -15,6 +15,8 @@ class AppSettingsStore(private val context: Context) {
 
     private val uidKey = stringPreferencesKey("bemfa_uid")
     private val debugLoggingKey = booleanPreferencesKey("debug_logging")
+    private val autoUpdateKey = booleanPreferencesKey("auto_update")
+    private val proxyFirstKey = booleanPreferencesKey("proxy_first")
 
     fun uidFlow(): Flow<String> =
         context.settingsDataStore.data.map { preferences -> preferences[uidKey].orEmpty() }
@@ -28,6 +30,28 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setDebugLogging(value: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[debugLoggingKey] = value
+        }
+    }
+
+    fun autoUpdateFlow(): Flow<Boolean> =
+        context.settingsDataStore.data.map { preferences -> preferences[autoUpdateKey] ?: true }
+
+    suspend fun autoUpdate(): Boolean = autoUpdateFlow().first()
+
+    suspend fun setAutoUpdate(value: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[autoUpdateKey] = value
+        }
+    }
+
+    fun proxyFirstFlow(): Flow<Boolean> =
+        context.settingsDataStore.data.map { preferences -> preferences[proxyFirstKey] ?: true }
+
+    suspend fun proxyFirst(): Boolean = proxyFirstFlow().first()
+
+    suspend fun setProxyFirst(value: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[proxyFirstKey] = value
         }
     }
 
