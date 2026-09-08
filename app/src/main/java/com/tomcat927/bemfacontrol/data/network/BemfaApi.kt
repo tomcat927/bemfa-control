@@ -39,6 +39,7 @@ object BemfaApiFactory {
             ignoreUnknownKeys = true
             explicitNulls = false
             coerceInputValues = true
+            encodeDefaults = true
         }
         val client = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
