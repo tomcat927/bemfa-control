@@ -419,12 +419,15 @@ private fun OutletGridCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DeviceDetailContent(
     device: OutletDevice?,
+    detailLoading: Boolean,
     onDismiss: () -> Unit,
     onToggle: (String, Boolean) -> Unit,
     onCopyTopic: (String) -> Unit,
+    onRefresh: () -> Unit,
 ) {
     if (device == null) {
         onDismiss()
