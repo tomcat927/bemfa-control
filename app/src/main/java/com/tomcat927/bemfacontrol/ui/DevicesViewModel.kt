@@ -31,6 +31,7 @@ data class DevicesUiState(
     val message: String? = null,
     val debugEnabled: Boolean = false,
     val showDebugDialog: Boolean = false,
+    val detailLoading: Boolean = false,
 )
 
 enum class ViewMode { ROOM, DEVICE }
@@ -163,6 +164,32 @@ class DevicesViewModel(
 
     fun selectDevice(topic: String?) {
         _uiState.update { it.copy(selectedDeviceTopic = topic) }
+        if (topic != null) refreshDeviceDetail()
+    }
+
+    fun refreshDeviceDetail() {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(detailLoading = true) }
+            runCatching { outletRepository.checkOnline(uid, topic) }
+                .onSuccess { online ->
+                    _uiState.update { state ->
+                        state.copy(
+                            detailLoading = false,
+                            allDevices = state.allDevices.map { device ->
+                                if (device.topic == topic) device.copy(isOnline = online) else device
+                            },
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("detail online check failed: topic=$topic", throwable)
+                    _uiState.update { it.copy(detailLoading = false) }
+                }
+        }
     }
 
     fun selectedDevice(): OutletDevice? =

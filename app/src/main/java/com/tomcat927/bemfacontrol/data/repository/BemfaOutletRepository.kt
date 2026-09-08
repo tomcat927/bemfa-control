@@ -39,6 +39,21 @@ class BemfaOutletRepository(
         OutletMapper.groupByRoom(outlets(uid))
 
     suspend fun setPower(uid: String, topic: String, on: Boolean) {
+    suspend fun checkOnline(uid: String, topic: String): Boolean {
+        val startedAt = System.currentTimeMillis()
+        try {
+            val response = api.checkOnline(uid, topic, BemfaApiFactory.tcpDeviceType())
+            assertSuccess(response.code, response.message ?: response.msg)
+            val online = response.data ?: false
+            RuntimeLog.debug("checkOnline: topic=$topic online=$online in ${System.currentTimeMillis() - startedAt}ms")
+            return online
+        } catch (throwable: Throwable) {
+            RuntimeLog.error("checkOnline failed: topic=$topic", throwable)
+            throw throwable
+        }
+    }
+
+    suspend fun setPower(uid: String, topic: String, on: Boolean) {
         RuntimeLog.debug("setPower start: topic=$topic target=${if (on) "on" else "off"}")
         val startedAt = System.currentTimeMillis()
         try {
