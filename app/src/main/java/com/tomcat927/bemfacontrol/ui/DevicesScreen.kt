@@ -27,7 +27,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.items as lazyRowItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -254,7 +254,7 @@ private fun DeviceListContent(
                         label = { Text("全部") },
                     )
                 }
-                items(state.rooms, key = { it }) { room ->
+                lazyRowItems(state.rooms, key = { it }) { room ->
                     FilterChip(
                         selected = state.selectedRoom == room,
                         onClick = { onSelectRoom(room) },
