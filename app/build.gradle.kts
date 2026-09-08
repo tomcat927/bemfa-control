@@ -13,8 +13,8 @@ android {
         applicationId = "com.tomcat927.bemfacontrol"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "2026.09.09.0235"
+        versionCode = 25
+        versionName = "2026.09.09.0300"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

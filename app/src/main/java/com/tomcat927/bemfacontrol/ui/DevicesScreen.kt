@@ -377,8 +377,8 @@ private fun TimerPage(
                     IconButton(onClick = onRefresh, enabled = !loading) {
                         Icon(Icons.Filled.Refresh, contentDescription = "刷新")
                     }
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "添加")
+                    TextButton(onClick = { showAddDialog = true }) {
+                        Text("添加")
                     }
                 },
             )
