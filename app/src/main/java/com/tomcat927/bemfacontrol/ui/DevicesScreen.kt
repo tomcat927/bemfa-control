@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -362,6 +363,7 @@ private fun TimerPage(
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
+    BackHandler { onDismiss() }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -823,6 +825,7 @@ private fun DeviceDetailContent(
         return
     }
 
+    BackHandler { onDismiss() }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -975,6 +978,7 @@ private fun SettingsScreen(
     onDownloadUpdate: () -> Unit,
     onDismissUpdate: () -> Unit,
 ) {
+    BackHandler { onDismiss() }
     Scaffold(
         topBar = {
             TopAppBar(
