@@ -58,9 +58,10 @@ class UpdateRepository(
         releaseInfo: ReleaseInfo,
         useProxy: Boolean,
         onProgress: (Float) -> Unit,
-    ): Boolean = withContext(Dispatchers.IO) {
-        val url = if (useProxy) releaseInfo.proxyUrl else releaseInfo.downloadUrl
-        RuntimeLog.debug("update: downloading from $useProxy")
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            val url = if (useProxy) releaseInfo.proxyUrl else releaseInfo.downloadUrl
+            RuntimeLog.debug("update: downloading from $useProxy")
 
         val cacheDir = File(context.externalCacheDir, "apk_updates").apply { mkdirs() }
         val apkFile = File(cacheDir, "bemfa-control-update.apk")
@@ -74,14 +75,14 @@ class UpdateRepository(
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
                 RuntimeLog.error("update: download failed HTTP ${response.code}")
-                return false
+                return@withContext false
             }
 
             response.body?.byteStream()?.use { input ->
                 apkFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
-            } ?: return false
+            } ?: return@withContext false
 
             // Verify SHA-256 if available
             if (releaseInfo.sha256Url.isNotEmpty()) {
@@ -94,7 +95,7 @@ class UpdateRepository(
                     if (!expectedSha.equals(actualSha, ignoreCase = true)) {
                         RuntimeLog.error("update: SHA-256 mismatch: expected=$expectedSha actual=$actualSha")
                         apkFile.delete()
-                        return false
+                        return@withContext false
                     }
                     RuntimeLog.debug("update: SHA-256 verified")
                 }
@@ -109,10 +110,11 @@ class UpdateRepository(
             }
             context.startActivity(intent)
             RuntimeLog.debug("update: install intent sent")
-            return true
+            return@withContext true
         } catch (throwable: Throwable) {
             RuntimeLog.error("update: download/install failed", throwable)
-            return false
+            return@withContext false
+        }
         }
     }
 
