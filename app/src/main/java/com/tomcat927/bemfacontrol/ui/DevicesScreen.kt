@@ -166,47 +166,6 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onMoveRoom = { viewModel.showMoveRoomDialog(true) },
                     onShowTimer = { viewModel.showTimerPage(true) },
                 )
-
-                if (state.editingName) {
-                    val dev = viewModel.selectedDevice()
-                    if (dev != null) {
-                        EditNameDialog(
-                            currentName = dev.name,
-                            onConfirm = { newName -> viewModel.editDeviceName(dev.topic, newName) },
-                            onDismiss = { viewModel.showEditNameDialog(false) },
-                        )
-                    }
-                }
-
-                if (state.movingRoom) {
-                    val dev = viewModel.selectedDevice()
-                    if (dev != null) {
-                        MoveRoomDialog(
-                            rooms = state.roomList,
-                            currentRoom = dev.room,
-                            onConfirm = { newRoom -> viewModel.moveDeviceToRoom(dev.topic, newRoom) },
-                            onDismiss = { viewModel.showMoveRoomDialog(false) },
-                        )
-                    }
-                }
-
-                if (state.showTimerPage) {
-                    val dev = viewModel.selectedDevice()
-                    if (dev != null) {
-                        TimerPage(
-                            device = dev,
-                            timers = state.timerList,
-                            loading = state.timerLoading,
-                            addingTimer = state.addingTimer,
-                            onRefresh = viewModel::refreshTimers,
-                            onAddTimer = viewModel::addTimer,
-                            onToggleTimer = viewModel::toggleTimer,
-                            onDeleteTimer = viewModel::deleteTimer,
-                            onDismiss = { viewModel.showTimerPage(false) },
-                        )
-                    }
-                }
-
                 else -> DeviceListContent(
                     state = state,
                     onToggle = viewModel::setPower,
@@ -243,6 +202,46 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onCheckUpdate = viewModel::checkForUpdate,
                     onDownloadUpdate = viewModel::downloadAndInstallUpdate,
                     onDismissUpdate = viewModel::dismissUpdateInfo,
+                )
+            }
+        }
+
+        if (state.editingName) {
+            val dev = viewModel.selectedDevice()
+            if (dev != null) {
+                EditNameDialog(
+                    currentName = dev.name,
+                    onConfirm = { newName -> viewModel.editDeviceName(dev.topic, newName) },
+                    onDismiss = { viewModel.showEditNameDialog(false) },
+                )
+            }
+        }
+
+        if (state.movingRoom) {
+            val dev = viewModel.selectedDevice()
+            if (dev != null) {
+                MoveRoomDialog(
+                    rooms = state.roomList,
+                    currentRoom = dev.room,
+                    onConfirm = { newRoom -> viewModel.moveDeviceToRoom(dev.topic, newRoom) },
+                    onDismiss = { viewModel.showMoveRoomDialog(false) },
+                )
+            }
+        }
+
+        if (state.showTimerPage) {
+            val dev = viewModel.selectedDevice()
+            if (dev != null) {
+                TimerPage(
+                    device = dev,
+                    timers = state.timerList,
+                    loading = state.timerLoading,
+                    addingTimer = state.addingTimer,
+                    onRefresh = viewModel::refreshTimers,
+                    onAddTimer = viewModel::addTimer,
+                    onToggleTimer = viewModel::toggleTimer,
+                    onDeleteTimer = viewModel::deleteTimer,
+                    onDismiss = { viewModel.showTimerPage(false) },
                 )
             }
         }
@@ -407,7 +406,7 @@ private fun TimerPage(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(timers, key = { it.id }) { timer ->
+                lazyColumnItems(timers, key = { it.id }) { timer ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(
