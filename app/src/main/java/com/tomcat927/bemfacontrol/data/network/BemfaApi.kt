@@ -21,7 +21,6 @@ interface BemfaApi {
     suspend fun allTopics(
         @Query("openID") uid: String,
         @Query("type") type: Int,
-    ): BemfaResponse<List<BemfaTopic>>
     ): BemfaResponse<BemfaTopicList>
 
     @POST("va/postJsonMsg")
