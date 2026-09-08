@@ -36,13 +36,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
+import com.tomcat927.bemfacontrol.data.model.BemfaRoom
+import com.tomcat927.bemfacontrol.data.model.BemfaTimer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -52,6 +56,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -65,6 +70,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -156,7 +162,50 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
                     },
                     onRefresh = viewModel::refreshDeviceDetail,
+                    onEditName = { viewModel.showEditNameDialog(true) },
+                    onMoveRoom = { viewModel.showMoveRoomDialog(true) },
+                    onShowTimer = { viewModel.showTimerPage(true) },
                 )
+
+                if (state.editingName) {
+                    val dev = viewModel.selectedDevice()
+                    if (dev != null) {
+                        EditNameDialog(
+                            currentName = dev.name,
+                            onConfirm = { newName -> viewModel.editDeviceName(dev.topic, newName) },
+                            onDismiss = { viewModel.showEditNameDialog(false) },
+                        )
+                    }
+                }
+
+                if (state.movingRoom) {
+                    val dev = viewModel.selectedDevice()
+                    if (dev != null) {
+                        MoveRoomDialog(
+                            rooms = state.roomList,
+                            currentRoom = dev.room,
+                            onConfirm = { newRoom -> viewModel.moveDeviceToRoom(dev.topic, newRoom) },
+                            onDismiss = { viewModel.showMoveRoomDialog(false) },
+                        )
+                    }
+                }
+
+                if (state.showTimerPage) {
+                    val dev = viewModel.selectedDevice()
+                    if (dev != null) {
+                        TimerPage(
+                            device = dev,
+                            timers = state.timerList,
+                            loading = state.timerLoading,
+                            addingTimer = state.addingTimer,
+                            onRefresh = viewModel::refreshTimers,
+                            onAddTimer = viewModel::addTimer,
+                            onToggleTimer = viewModel::toggleTimer,
+                            onDeleteTimer = viewModel::deleteTimer,
+                            onDismiss = { viewModel.showTimerPage(false) },
+                        )
+                    }
+                }
 
                 else -> DeviceListContent(
                     state = state,
@@ -198,6 +247,323 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
             }
         }
     }
+}
+
+@Composable
+private fun EditNameDialog(
+    currentName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑昵称") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("设备昵称") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name.trim()) },
+                enabled = name.trim().isNotEmpty(),
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun MoveRoomDialog(
+    rooms: List<BemfaRoom>,
+    currentRoom: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selectedRoom by remember { mutableStateOf(currentRoom) }
+    var showNewRoomInput by remember { mutableStateOf(false) }
+    var newRoomName by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择房间") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                rooms.forEach { room ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedRoom = room.name; showNewRoomInput = false }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selectedRoom == room.name && !showNewRoomInput,
+                            onClick = { selectedRoom = room.name; showNewRoomInput = false },
+                        )
+                        Text("${room.name} (${room.num})")
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showNewRoomInput = true; selectedRoom = "" }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = showNewRoomInput,
+                        onClick = { showNewRoomInput = true; selectedRoom = "" },
+                    )
+                    Text("新建房间")
+                }
+                if (showNewRoomInput) {
+                    OutlinedTextField(
+                        value = newRoomName,
+                        onValueChange = { newRoomName = it; selectedRoom = it },
+                        label = { Text("新房间名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedRoom.trim()) },
+                enabled = selectedRoom.trim().isNotEmpty(),
+            ) { Text("确认") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimerPage(
+    device: OutletDevice,
+    timers: List<BemfaTimer>,
+    loading: Boolean,
+    addingTimer: Boolean,
+    onRefresh: () -> Unit,
+    onAddTimer: (String, String, List<Int>) -> Unit,
+    onToggleTimer: (Int, Boolean) -> Unit,
+    onDeleteTimer: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("定时任务", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onRefresh, enabled = !loading) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                    }
+                    IconButton(onClick = { showAddDialog = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = "添加")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        if (loading) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        if (timers.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "暂无定时任务",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(timers, key = { it.id }) { timer ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = timer.time,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                                Switch(
+                                    checked = timer.isEnabled,
+                                    onCheckedChange = { onToggleTimer(timer.id, it) },
+                                )
+                            }
+                            Text(
+                                text = "消息: ${timer.msg}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            val weekNames = listOf("日", "一", "二", "三", "四", "五", "六")
+                            val weekText = if (timer.week.size == 7) "每天"
+                                else if (timer.week.isEmpty()) "不重复"
+                                else timer.week.sorted().joinToString(" ") { "周${weekNames[it]}" }
+                            Text(
+                                text = weekText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(
+                                onClick = { onDeleteTimer(timer.id) },
+                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Text("删除")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddTimerDialog(
+            onConfirm = { time, msg, week ->
+                onAddTimer(time, msg, week)
+                showAddDialog = false
+            },
+            onDismiss = { showAddDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun AddTimerDialog(
+    onConfirm: (String, String, List<Int>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var hour by remember { mutableStateOf("22") }
+    var minute by remember { mutableStateOf("30") }
+    var second by remember { mutableStateOf("00") }
+    var msg by remember { mutableStateOf("on") }
+    val weekDays = remember { mutableStateListOf(true, true, true, true, true, true, true) }
+    val weekLabels = listOf("一", "二", "三", "四", "五", "六", "日")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("新建定时任务") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = hour,
+                        onValueChange = { if (it.length <= 2) hour = it.filter { c -> c.isDigit() } },
+                        label = { Text("时") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(":")
+                    OutlinedTextField(
+                        value = minute,
+                        onValueChange = { if (it.length <= 2) minute = it.filter { c -> c.isDigit() } },
+                        label = { Text("分") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(":")
+                    OutlinedTextField(
+                        value = second,
+                        onValueChange = { if (it.length <= 2) second = it.filter { c -> c.isDigit() } },
+                        label = { Text("秒") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                // Message toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = msg == "on",
+                        onClick = { msg = "on" },
+                        label = { Text("开启") },
+                        modifier = Modifier.weight(1f),
+                    )
+                    FilterChip(
+                        selected = msg == "off",
+                        onClick = { msg = "off" },
+                        label = { Text("关闭") },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                // Week selection
+                Text("重复", style = MaterialTheme.typography.labelMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    weekLabels.forEachIndexed { index, label ->
+                        val dayIndex = if (index == 6) 0 else index + 1
+                        FilterChip(
+                            selected = weekDays[index],
+                            onClick = { weekDays[index] = !weekDays[index] },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val time = "$hour:$minute:$second"
+                val week = weekDays.mapIndexedNotNull { index, selected ->
+                    if (selected) (if (index == 6) 0 else index + 1) else null
+                }
+                onConfirm(time, msg, week)
+            }) { Text("添加") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -449,6 +815,9 @@ private fun DeviceDetailContent(
     onToggle: (String, Boolean) -> Unit,
     onCopyTopic: (String) -> Unit,
     onRefresh: () -> Unit,
+    onEditName: () -> Unit,
+    onMoveRoom: () -> Unit,
+    onShowTimer: () -> Unit,
 ) {
     if (device == null) {
         onDismiss()
@@ -574,6 +943,24 @@ private fun DeviceDetailContent(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = onEditName,
+                ) { Text("编辑昵称") }
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = onMoveRoom,
+                ) { Text("移动房间") }
+            }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onShowTimer,
+            ) { Text("定时任务") }
         }
     }
 }

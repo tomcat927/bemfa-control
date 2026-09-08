@@ -85,3 +85,102 @@ data class DeviceGroup(
     val room: String,
     val devices: List<OutletDevice>,
 )
+
+@Serializable
+data class BemfaNameRequest(
+    val uid: String,
+    val topic: String,
+    val type: Int = 3,
+    val name: String,
+)
+
+@Serializable
+data class BemfaChangeRoomRequest(
+    val openID: String,
+    val topicIDs: List<String>,
+    val type: Int = 3,
+    val room: String = "",
+)
+
+@Serializable(with = BemfaRoomListSerializer::class)
+data class BemfaRoomList(
+    val rooms: List<BemfaRoom> = emptyList(),
+)
+
+object BemfaRoomListSerializer : KSerializer<BemfaRoomList> {
+    private val delegate = ListSerializer(BemfaRoom.serializer())
+    override val descriptor = delegate.descriptor
+
+    override fun deserialize(decoder: Decoder): BemfaRoomList {
+        val element = (decoder as JsonDecoder).decodeJsonElement()
+        val arr = when (element) {
+            is JsonArray -> element
+            is JsonObject -> element["data"] as? JsonArray ?: JsonArray(emptyList())
+            else -> JsonArray(emptyList())
+        }
+        return BemfaRoomList(decoder.json.decodeFromJsonElement(delegate, arr))
+    }
+
+    override fun serialize(encoder: Encoder, value: BemfaRoomList) {
+        delegate.serialize(encoder, value.rooms)
+    }
+}
+
+@Serializable
+data class BemfaRoom(
+    val name: String = "",
+    val num: Int = 0,
+)
+
+@Serializable(with = BemfaTimerListSerializer::class)
+data class BemfaTimerList(
+    val timers: List<BemfaTimer> = emptyList(),
+)
+
+object BemfaTimerListSerializer : KSerializer<BemfaTimerList> {
+    private val delegate = ListSerializer(BemfaTimer.serializer())
+    override val descriptor = delegate.descriptor
+
+    override fun deserialize(decoder: Decoder): BemfaTimerList {
+        val element = (decoder as JsonDecoder).decodeJsonElement()
+        val arr = when (element) {
+            is JsonArray -> element
+            is JsonObject -> element["data"] as? JsonArray ?: JsonArray(emptyList())
+            else -> JsonArray(emptyList())
+        }
+        return BemfaTimerList(decoder.json.decodeFromJsonElement(delegate, arr))
+    }
+
+    override fun serialize(encoder: Encoder, value: BemfaTimerList) {
+        delegate.serialize(encoder, value.timers)
+    }
+}
+
+@Serializable
+data class BemfaTimer(
+    val id: Int = 0,
+    val status: Int = 0,
+    val time: String = "",
+    val msg: String = "",
+    val week: List<Int> = emptyList(),
+) {
+    val isEnabled: Boolean get() = status == 1
+}
+
+@Serializable
+data class BemfaTimerRequest(
+    val openID: String,
+    val topicID: String,
+    val type: Int = 3,
+    val time: String,
+    val msg: String,
+    val week: List<Int> = listOf(0, 1, 2, 3, 4, 5, 6),
+)
+
+@Serializable
+data class BemfaTimerToggleRequest(
+    val openID: String,
+    val topicID: String,
+    val type: Int = 3,
+    val id: Int,
+)
