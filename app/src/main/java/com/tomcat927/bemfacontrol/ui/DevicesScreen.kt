@@ -115,39 +115,45 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
         }
     }
 
+    val hasInnerTopBar = state.selectedDeviceTopic != null ||
+        state.showTimerPage ||
+        state.showSettings
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = appTopAppBarColors(),
-                title = { Text("巴法智控") },
-                actions = {
-                    if (state.lastSyncTime != null) {
-                        Text(
-                            text = state.lastSyncTime!!,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(end = 4.dp),
-                        )
-                    }
-                    TextButton(onClick = { viewModel.showDebugDialog(true) }) {
-                        Text(
-                            text = "日志",
-                            color = if (state.debugEnabled) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                    IconButton(onClick = { viewModel.showSettings(true) }) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "设置",
-                        )
-                    }
-                    TextButton(onClick = viewModel::refresh) {
-                        Text("刷新")
+            if (!hasInnerTopBar) {
+                TopAppBar(
+                    colors = appTopAppBarColors(),
+                    title = { Text("巴法智控") },
+                    actions = {
+                        if (state.lastSyncTime != null) {
+                            Text(
+                                text = state.lastSyncTime!!,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(end = 4.dp),
+                            )
+                        }
+                        TextButton(onClick = { viewModel.showDebugDialog(true) }) {
+                            Text(
+                                text = "日志",
+                                color = if (state.debugEnabled) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        IconButton(onClick = { viewModel.showSettings(true) }) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "设置",
+                            )
+                        }
+                        TextButton(onClick = viewModel::refresh) {
+                            Text("刷新")
+                        }
                     }
                 },
             )
