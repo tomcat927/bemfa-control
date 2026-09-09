@@ -326,8 +326,6 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onAutoUpdateChange = viewModel::setAutoUpdate,
                     onProxyFirstChange = viewModel::setProxyFirst,
                     onCheckUpdate = viewModel::checkForUpdate,
-                    onDownloadUpdate = viewModel::downloadAndInstallUpdate,
-                    onDismissUpdate = viewModel::dismissUpdateInfo,
                 )
             }
 
@@ -352,6 +350,46 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     showAddTimerDialog = false
                 },
                 onDismiss = { showAddTimerDialog = false },
+            )
+        }
+
+        if (state.updateInfo != null) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissUpdateInfo,
+                title = { Text("发现新版本") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = state.updateInfo!!.versionName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = state.updateInfo!!.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = viewModel::downloadAndInstallUpdate,
+                        enabled = !state.updateDownloading,
+                    ) {
+                        if (state.updateDownloading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("下载并安装")
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissUpdateInfo) {
+                        Text("稍后")
+                    }
+                },
             )
         }
 
@@ -1356,8 +1394,6 @@ private fun SettingsContent(
     onAutoUpdateChange: (Boolean) -> Unit,
     onProxyFirstChange: (Boolean) -> Unit,
     onCheckUpdate: () -> Unit,
-    onDownloadUpdate: () -> Unit,
-    onDismissUpdate: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1430,45 +1466,6 @@ private fun SettingsContent(
         }
     }
 
-    if (state.updateInfo != null) {
-        AlertDialog(
-            onDismissRequest = onDismissUpdate,
-            title = { Text("发现新版本") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = state.updateInfo!!.versionName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = state.updateInfo!!.releaseNotes,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = onDownloadUpdate,
-                    enabled = !state.updateDownloading,
-                ) {
-                    if (state.updateDownloading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text("下载并安装")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissUpdate) {
-                    Text("稍后")
-                }
-            },
-        )
-    }
 }
 
 @Composable
