@@ -4,10 +4,14 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer()
 
 private val Context.settingsDataStore by preferencesDataStore(name = "app_settings")
 
@@ -17,6 +21,9 @@ class AppSettingsStore(private val context: Context) {
     private val debugLoggingKey = booleanPreferencesKey("debug_logging")
     private val autoUpdateKey = booleanPreferencesKey("auto_update")
     private val proxyFirstKey = booleanPreferencesKey("proxy_first")
+    private val roomOrderKey = stringPreferencesKey("room_order")
+
+    private val roomOrderJson = Json { encodeDefaults = true }
 
     fun uidFlow(): Flow<String> =
         context.settingsDataStore.data.map { preferences -> preferences[uidKey].orEmpty() }
@@ -58,6 +65,22 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setUid(value: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[uidKey] = value.trim()
+        }
+    }
+
+    fun roomOrderFlow(): Flow<List<String>> =
+        context.settingsDataStore.data.map { preferences ->
+            val raw = preferences[roomOrderKey].orEmpty()
+            if (raw.isBlank()) emptyList()
+            else roomOrderJson.decodeFromString(ListSerializer(String.serializer()), raw)
+        }
+
+    suspend fun roomOrder(): List<String> = roomOrderFlow().first()
+
+    suspend fun setRoomOrder(order: List<String>) {
+        val encoded = roomOrderJson.encodeToString(ListSerializer(String.serializer()), order)
+        context.settingsDataStore.edit { preferences ->
+            preferences[roomOrderKey] = encoded
         }
     }
 }

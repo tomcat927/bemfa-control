@@ -25,11 +25,19 @@ object OutletMapper {
             }
             .sortedWith(compareBy({ it.room }, { it.name }, { it.topic }))
 
-    fun groupByRoom(devices: List<OutletDevice>): List<DeviceGroup> =
-        devices
+    fun groupByRoom(devices: List<OutletDevice>, roomOrder: List<String> = emptyList()): List<DeviceGroup> {
+        val grouped = devices
             .groupBy { it.room }
             .map { (room, roomDevices) -> DeviceGroup(room, roomDevices) }
-            .sortedBy { it.room }
+        if (roomOrder.isEmpty()) return grouped.sortedBy { it.room }
+        val orderMap = roomOrder.withIndex().associate { it.value to it.index }
+        return grouped.sortedWith(
+            compareBy(
+                { orderMap[it.room] ?: Int.MAX_VALUE },
+                { it.room },
+            ),
+        )
+    }
 
     fun isOutlet(topic: BemfaTopic): Boolean =
         topic.deviceType.equals("outlet", ignoreCase = true) ||

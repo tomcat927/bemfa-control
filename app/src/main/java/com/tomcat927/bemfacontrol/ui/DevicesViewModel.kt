@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.tomcat927.bemfacontrol.data.model.DeviceGroup
 import com.tomcat927.bemfacontrol.data.repository.BemfaOutletRepository
+import com.tomcat927.bemfacontrol.data.repository.OutletMapper
 import com.tomcat927.bemfacontrol.data.repository.UpdateRepository
 import com.tomcat927.bemfacontrol.data.model.ReleaseInfo
 import com.tomcat927.bemfacontrol.BuildConfig
@@ -26,6 +27,7 @@ data class DevicesUiState(
     val groups: List<DeviceGroup> = emptyList(),
     val allDevices: List<OutletDevice> = emptyList(),
     val rooms: List<String> = emptyList(),
+    val roomOrder: List<String> = emptyList(),
     val selectedRoom: String? = null,
     val viewMode: ViewMode = ViewMode.ROOM,
     val selectedDeviceTopic: String? = null,
@@ -47,6 +49,8 @@ data class DevicesUiState(
     val editingName: Boolean = false,
     val movingRoom: Boolean = false,
     val roomList: List<BemfaRoom> = emptyList(),
+    val showRoomManage: Boolean = false,
+    val renamingRoom: Boolean = false,
     val showTimerPage: Boolean = false,
     val timerList: List<BemfaTimer> = emptyList(),
     val timerLoading: Boolean = false,
@@ -68,7 +72,8 @@ class DevicesViewModel(
         viewModelScope.launch {
             val enabled = settingsStore.debugLogging()
             RuntimeLog.enabled = enabled
-            _uiState.update { it.copy(debugEnabled = enabled, autoUpdate = settingsStore.autoUpdate(), proxyFirst = settingsStore.proxyFirst()) }
+            val order = settingsStore.roomOrder()
+            _uiState.update { it.copy(debugEnabled = enabled, autoUpdate = settingsStore.autoUpdate(), proxyFirst = settingsStore.proxyFirst(), roomOrder = order) }
             if (settingsStore.autoUpdate()) {
                 checkForUpdate()
             }
@@ -88,17 +93,21 @@ class DevicesViewModel(
             }
 
             _uiState.update { it.copy(needsSetup = false, uid = uid) }
-            runCatching { outletRepository.groups(uid) }
+            val order = settingsStore.roomOrder()
+            runCatching { outletRepository.groups(uid, order) }
                 .onSuccess { groups ->
                     RuntimeLog.debug("sync success: ${groups.sumOf { it.devices.size }} devices")
                     _uiState.update { state ->
                         val allDevices = groups.flatMap { it.devices }
                         val rooms = groups.map { it.room }.distinct()
+                        val mergedOrder = mergeRoomOrder(order, rooms)
+                        val orderedGroups = if (order != mergedOrder) OutletMapper.groupByRoom(allDevices, mergedOrder) else groups
                         state.copy(
                             isLoading = false,
-                            groups = groups,
+                            groups = orderedGroups,
                             allDevices = allDevices,
-                            rooms = rooms,
+                            rooms = orderedGroups.map { it.room },
+                            roomOrder = mergedOrder,
                             lastSyncTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date()),
                             totalCount = groups.sumOf { group -> group.devices.size },
                             onlineCount = groups.sumOf { group ->
@@ -441,6 +450,47 @@ class DevicesViewModel(
                     )
                 },
             )
+        }
+    }
+
+    private fun mergeRoomOrder(saved: List<String>, currentRooms: List<String>): List<String> {
+        val result = saved.filter { it in currentRooms }.toMutableList()
+        currentRooms.filter { it !in result }.forEach { result.add(it) }
+        return result
+    }
+
+    fun showRoomManage(visible: Boolean) {
+        _uiState.update { it.copy(showRoomManage = visible) }
+    }
+
+    fun saveRoomOrder(order: List<String>) {
+        viewModelScope.launch {
+            settingsStore.setRoomOrder(order)
+            _uiState.update { it.copy(roomOrder = order) }
+            refresh()
+        }
+    }
+
+    fun renameRoom(oldRoom: String, newRoom: String) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val trimmed = newRoom.trim()
+        if (trimmed.isEmpty() || trimmed == oldRoom) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(renamingRoom = true) }
+            val topics = _uiState.value.allDevices.filter { it.room == oldRoom }.map { it.topic }
+            runCatching { outletRepository.batchChangeRoom(uid, topics, trimmed) }
+                .onSuccess {
+                    RuntimeLog.info("renameRoom success: $oldRoom -> $trimmed (${topics.size} devices)")
+                    val newOrder = _uiState.value.roomOrder.map { if (it == oldRoom) trimmed else it }
+                    settingsStore.setRoomOrder(newOrder)
+                    _uiState.update { it.copy(renamingRoom = false, showRoomManage = false) }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("renameRoom failed: $oldRoom -> $trimmed", throwable)
+                    _uiState.update { it.copy(renamingRoom = false, message = throwable.message ?: "房间改名失败") }
+                }
         }
     }
 

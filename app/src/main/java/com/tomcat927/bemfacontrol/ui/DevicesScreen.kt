@@ -38,6 +38,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -179,6 +182,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         clipboard.setPrimaryClip(ClipData.newPlainText("topic", topic))
                         Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
                     },
+                    onShowRoomManage = { viewModel.showRoomManage(true) },
                 )
             }
 
@@ -246,6 +250,16 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onDismiss = { viewModel.showTimerPage(false) },
                 )
             }
+        }
+
+        if (state.showRoomManage) {
+            RoomManageDialog(
+                rooms = state.roomOrder,
+                renaming = state.renamingRoom,
+                onReorder = viewModel::saveRoomOrder,
+                onRename = viewModel::renameRoom,
+                onDismiss = { viewModel.showRoomManage(false) },
+            )
         }
     }
 }
@@ -345,6 +359,118 @@ private fun MoveRoomDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun RoomManageDialog(
+    rooms: List<String>,
+    renaming: Boolean,
+    onReorder: (List<String>) -> Unit,
+    onRename: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var roomList by remember(rooms) { mutableStateOf(rooms.toList()) }
+    var editingRoom by remember { mutableStateOf<String?>(null) }
+    var editName by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("房间管理") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (roomList.isEmpty()) {
+                    Text("暂无房间", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                roomList.forEachIndexed { index, room ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (editingRoom == room) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (editingRoom == room) {
+                            OutlinedTextField(
+                                value = editName,
+                                onValueChange = { editName = it },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                            )
+                            TextButton(
+                                onClick = {
+                                    val trimmed = editName.trim()
+                                    if (trimmed.isNotEmpty() && trimmed != room) {
+                                        onRename(room, trimmed)
+                                    }
+                                    editingRoom = null
+                                },
+                            ) { Text("确定") }
+                            TextButton(onClick = { editingRoom = null }) { Text("取消") }
+                        } else {
+                            Text(
+                                text = room,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            IconButton(
+                                onClick = {
+                                    editingRoom = room
+                                    editName = room
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = "改名",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Row {
+                                IconButton(
+                                    onClick = { if (index > 0) { val l = roomList.toMutableList(); val item = l.removeAt(index); l.add(index - 1, item); roomList = l; onReorder(l) } },
+                                    enabled = index > 0,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.KeyboardArrowUp,
+                                        contentDescription = "上移",
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { if (index < roomList.lastIndex) { val l = roomList.toMutableList(); val item = l.removeAt(index); l.add(index + 1, item); roomList = l; onReorder(l) } },
+                                    enabled = index < roomList.lastIndex,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = "下移",
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                if (renaming) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text("正在改名...", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("完成") }
         },
     )
 }
@@ -662,6 +788,7 @@ private fun DeviceListContent(
     onViewModeChange: (ViewMode) -> Unit,
     onDeviceClick: (String) -> Unit,
     onCopyTopic: (String) -> Unit,
+    onShowRoomManage: () -> Unit,
 ) {
     val displayDevices = when {
         state.viewMode == ViewMode.DEVICE -> state.allDevices
@@ -714,11 +841,12 @@ private fun DeviceListContent(
         }
 
         // Room filter row (only in ROOM mode)
-        if (state.viewMode == ViewMode.ROOM && state.rooms.isNotEmpty()) {
+        if (state.viewMode == ViewMode.ROOM && state.roomOrder.isNotEmpty()) {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 item {
                     FilterChip(
@@ -727,12 +855,25 @@ private fun DeviceListContent(
                         label = { Text("全部") },
                     )
                 }
-                lazyRowItems(state.rooms, key = { it }) { room ->
+                lazyRowItems(state.roomOrder, key = { it }) { room ->
                     FilterChip(
                         selected = state.selectedRoom == room,
                         onClick = { onSelectRoom(room) },
                         label = { Text(room) },
                     )
+                }
+                item {
+                    IconButton(
+                        onClick = onShowRoomManage,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "房间管理",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }

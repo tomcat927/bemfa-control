@@ -41,8 +41,8 @@ class BemfaOutletRepository(
         }
     }
 
-    suspend fun groups(uid: String): List<DeviceGroup> =
-        OutletMapper.groupByRoom(outlets(uid))
+    suspend fun groups(uid: String, roomOrder: List<String> = emptyList()): List<DeviceGroup> =
+        OutletMapper.groupByRoom(outlets(uid), roomOrder)
 
     suspend fun checkOnline(uid: String, topic: String): Boolean {
         val startedAt = System.currentTimeMillis()
@@ -123,6 +123,20 @@ class BemfaOutletRepository(
             RuntimeLog.debug("changeRoom success: topic=$topic room=$room in ${System.currentTimeMillis() - startedAt}ms")
         } catch (throwable: Throwable) {
             RuntimeLog.error("changeRoom failed: topic=$topic", throwable)
+            throw throwable
+        }
+    }
+
+    suspend fun batchChangeRoom(uid: String, topics: List<String>, newRoom: String) {
+        val startedAt = System.currentTimeMillis()
+        try {
+            val response = api.changeTopicRoom(
+                BemfaChangeRoomRequest(uid, topics, BemfaApiFactory.tcpDeviceType(), newRoom)
+            )
+            assertSuccess(response.code, response.message ?: response.msg)
+            RuntimeLog.debug("batchChangeRoom success: ${topics.size} devices -> room=$newRoom in ${System.currentTimeMillis() - startedAt}ms")
+        } catch (throwable: Throwable) {
+            RuntimeLog.error("batchChangeRoom failed: room=$newRoom", throwable)
             throw throwable
         }
     }
