@@ -264,7 +264,13 @@ class DevicesViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(updateChecking = true) }
             val info = updateRepository.checkForUpdate(BuildConfig.VERSION_NAME)
-            _uiState.update { it.copy(updateChecking = false, updateInfo = if (info?.isNewer == true) info else null) }
+            _uiState.update { state ->
+                when {
+                    info?.isNewer == true -> state.copy(updateChecking = false, updateInfo = info)
+                    info != null -> state.copy(updateChecking = false, message = "已是最新版本 ${BuildConfig.VERSION_NAME}")
+                    else -> state.copy(updateChecking = false, message = "检查更新失败，请稍后重试")
+                }
+            }
         }
     }
 

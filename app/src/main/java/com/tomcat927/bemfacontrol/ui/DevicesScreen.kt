@@ -543,17 +543,45 @@ private fun AddTimerDialog(
 
                 // Week selection
                 Text("重复", style = MaterialTheme.typography.labelMedium)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    weekLabels.forEachIndexed { index, label ->
-                        val dayIndex = if (index == 6) 0 else index + 1
-                        FilterChip(
-                            selected = weekDays[index],
-                            onClick = { weekDays[index] = !weekDays[index] },
-                            label = { Text(label) },
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0, 1).forEach { rowIndex ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            for (colIndex in 0 until 4) {
+                                val index = rowIndex * 4 + colIndex
+                                if (index < weekLabels.size) {
+                                    val selected = weekDays[index]
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (selected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                            .border(
+                                                width = 2.dp,
+                                                color = if (selected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant,
+                                                shape = RoundedCornerShape(8.dp),
+                                            )
+                                            .clickable { weekDays[index] = !weekDays[index] }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = "周${weekLabels[index]}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
