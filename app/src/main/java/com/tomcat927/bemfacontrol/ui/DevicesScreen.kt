@@ -363,6 +363,7 @@ private fun TimerPage(
     onDismiss: () -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var pendingDeleteTimerId by remember { mutableStateOf<Int?>(null) }
 
     BackHandler { onDismiss() }
     Scaffold(
@@ -447,7 +448,7 @@ private fun TimerPage(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             TextButton(
-                                onClick = { onDeleteTimer(timer.id) },
+                                onClick = { pendingDeleteTimerId = timer.id },
                                 colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
@@ -468,6 +469,32 @@ private fun TimerPage(
                 showAddDialog = false
             },
             onDismiss = { showAddDialog = false },
+        )
+    }
+
+    pendingDeleteTimerId?.let { timerId ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteTimerId = null },
+            title = { Text("删除定时任务") },
+            text = { Text("确定删除该定时任务吗？删除后不可恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteTimer(timerId)
+                        pendingDeleteTimerId = null
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteTimerId = null }) {
+                    Text("取消")
+                }
+            },
         )
     }
 }
@@ -523,22 +550,46 @@ private fun AddTimerDialog(
                 }
 
                 // Message toggle
+                Text("动作", style = MaterialTheme.typography.labelMedium)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    FilterChip(
-                        selected = msg == "on",
-                        onClick = { msg = "on" },
-                        label = { Text("开启") },
-                        modifier = Modifier.weight(1f),
-                    )
-                    FilterChip(
-                        selected = msg == "off",
-                        onClick = { msg = "off" },
-                        label = { Text("关闭") },
-                        modifier = Modifier.weight(1f),
-                    )
+                    val isOn = msg == "on"
+                    listOf(
+                        "on" to "开启",
+                        "off" to "关闭",
+                    ).forEach { (value, label) ->
+                        val selected = msg == value
+                        val selectedColor = if (value == "on") MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (selected) selectedColor
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .border(
+                                    width = 2.dp,
+                                    color = if (selected) selectedColor
+                                    else MaterialTheme.colorScheme.outlineVariant,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .clickable { msg = value }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
 
                 // Week selection
