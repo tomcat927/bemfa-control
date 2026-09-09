@@ -3,6 +3,7 @@ package com.tomcat927.bemfacontrol.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -1278,10 +1279,15 @@ private fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("项目地址", style = MaterialTheme.typography.labelMedium)
+                        val context = LocalContext.current
                         Text(
                             text = "github.com/tomcat927/bemfa-control",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tomcat927/bemfa-control"))
+                                context.startActivity(intent)
+                            },
                         )
                     }
                 }
