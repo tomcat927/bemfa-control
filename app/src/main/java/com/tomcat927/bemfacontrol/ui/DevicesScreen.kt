@@ -100,6 +100,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
 
+private enum class DevicesPage {
+    SETUP,
+    LIST,
+    DETAIL,
+    TIMER,
+    SETTINGS,
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DevicesScreen(viewModel: DevicesViewModel) {
@@ -107,6 +115,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    var showAddTimerDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.message) {
         state.message?.let { message ->
@@ -115,15 +124,42 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
         }
     }
 
-    val hasInnerTopBar = state.selectedDeviceTopic != null ||
-        state.showTimerPage ||
-        state.showSettings
+    val selectedDevice = if (state.selectedDeviceTopic == null) null else viewModel.selectedDevice()
+    val currentPage = when {
+        state.needsSetup -> DevicesPage.SETUP
+        state.showSettings -> DevicesPage.SETTINGS
+        selectedDevice != null && state.showTimerPage -> DevicesPage.TIMER
+        selectedDevice != null -> DevicesPage.DETAIL
+        else -> DevicesPage.LIST
+    }
+
+    LaunchedEffect(currentPage) {
+        if (currentPage != DevicesPage.TIMER) {
+            showAddTimerDialog = false
+        }
+    }
+
+    BackHandler(enabled = currentPage == DevicesPage.SETTINGS) {
+        viewModel.showSettings(false)
+    }
+    BackHandler(enabled = currentPage == DevicesPage.DETAIL) {
+        viewModel.selectDevice(null)
+    }
+    BackHandler(enabled = currentPage == DevicesPage.TIMER) {
+        showAddTimerDialog = false
+        viewModel.showTimerPage(false)
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (!hasInnerTopBar) {
-                TopAppBar(
+            when (currentPage) {
+                DevicesPage.SETUP -> TopAppBar(
+                    colors = appTopAppBarColors(),
+                    title = { Text("巴法智控") },
+                )
+
+                DevicesPage.LIST -> TopAppBar(
                     colors = appTopAppBarColors(),
                     title = { Text("巴法智控") },
                     actions = {
@@ -154,9 +190,84 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         TextButton(onClick = viewModel::refresh) {
                             Text("刷新")
                         }
-                    }
-                },
-            )
+                    },
+                )
+
+                DevicesPage.DETAIL -> TopAppBar(
+                    colors = appTopAppBarColors(),
+                    title = {
+                        Text(
+                            text = selectedDevice?.name.orEmpty(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.selectDevice(null) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = viewModel::refreshDeviceDetail,
+                            enabled = !state.detailLoading,
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                        }
+                    },
+                )
+
+                DevicesPage.TIMER -> TopAppBar(
+                    colors = appTopAppBarColors(),
+                    title = { Text("定时任务") },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            showAddTimerDialog = false
+                            viewModel.showTimerPage(false)
+                        }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = viewModel::refreshTimers,
+                            enabled = !state.timerLoading,
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                        }
+                    },
+                )
+
+                DevicesPage.SETTINGS -> TopAppBar(
+                    colors = appTopAppBarColors(),
+                    title = { Text("设置") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.showSettings(false) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                )
+            }
+        },
+        floatingActionButton = {
+            if (currentPage == DevicesPage.TIMER) {
+                FloatingActionButton(
+                    onClick = { showAddTimerDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "添加定时任务")
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -165,28 +276,13 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when {
-                state.needsSetup -> SetupContent(
+            when (currentPage) {
+                DevicesPage.SETUP -> SetupContent(
                     isLoading = state.isLoading,
                     onConfigure = viewModel::configureUid,
                 )
 
-                state.selectedDeviceTopic != null -> DeviceDetailContent(
-                    device = viewModel.selectedDevice(),
-                    detailLoading = state.detailLoading,
-                    timerCount = state.timerCountByTopic[state.selectedDeviceTopic],
-                    onDismiss = { viewModel.selectDevice(null) },
-                    onToggle = viewModel::setPower,
-                    onCopyTopic = { topic ->
-                        clipboard.setPrimaryClip(ClipData.newPlainText("topic", topic))
-                        Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
-                    },
-                    onRefresh = viewModel::refreshDeviceDetail,
-                    onEditName = { viewModel.showEditNameDialog(true) },
-                    onMoveRoom = { viewModel.showMoveRoomDialog(true) },
-                    onShowTimer = { viewModel.showTimerPage(true) },
-                )
-                else -> DeviceListContent(
+                DevicesPage.LIST -> DeviceListContent(
                     state = state,
                     onToggle = viewModel::setPower,
                     onRefresh = viewModel::refresh,
@@ -198,6 +294,40 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
                     },
                     onShowRoomManage = { viewModel.showRoomManage(true) },
+                )
+
+                DevicesPage.DETAIL -> DeviceDetailContent(
+                    device = selectedDevice,
+                    detailLoading = state.detailLoading,
+                    timerCount = state.timerCountByTopic[state.selectedDeviceTopic],
+                    onToggle = viewModel::setPower,
+                    onCopyTopic = { topic ->
+                        clipboard.setPrimaryClip(ClipData.newPlainText("topic", topic))
+                        Toast.makeText(context, "topic 已复制", Toast.LENGTH_SHORT).show()
+                    },
+                    onRefresh = viewModel::refreshDeviceDetail,
+                    onEditName = { viewModel.showEditNameDialog(true) },
+                    onMoveRoom = { viewModel.showMoveRoomDialog(true) },
+                    onShowTimer = {
+                        showAddTimerDialog = false
+                        viewModel.showTimerPage(true)
+                    },
+                )
+
+                DevicesPage.TIMER -> TimerContent(
+                    timers = state.timerList,
+                    loading = state.timerLoading,
+                    onToggleTimer = viewModel::toggleTimer,
+                    onDeleteTimer = viewModel::deleteTimer,
+                )
+
+                DevicesPage.SETTINGS -> SettingsContent(
+                    state = state,
+                    onAutoUpdateChange = viewModel::setAutoUpdate,
+                    onProxyFirstChange = viewModel::setProxyFirst,
+                    onCheckUpdate = viewModel::checkForUpdate,
+                    onDownloadUpdate = viewModel::downloadAndInstallUpdate,
+                    onDismissUpdate = viewModel::dismissUpdateInfo,
                 )
             }
 
@@ -213,22 +343,20 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onDismiss = { viewModel.showDebugDialog(false) },
                 )
             }
+        }
 
-            if (state.showSettings) {
-                SettingsScreen(
-                    state = state,
-                    onDismiss = { viewModel.showSettings(false) },
-                    onAutoUpdateChange = viewModel::setAutoUpdate,
-                    onProxyFirstChange = viewModel::setProxyFirst,
-                    onCheckUpdate = viewModel::checkForUpdate,
-                    onDownloadUpdate = viewModel::downloadAndInstallUpdate,
-                    onDismissUpdate = viewModel::dismissUpdateInfo,
-                )
-            }
+        if (showAddTimerDialog) {
+            AddTimerDialog(
+                onConfirm = { time, msg, week ->
+                    viewModel.addTimer(time, msg, week)
+                    showAddTimerDialog = false
+                },
+                onDismiss = { showAddTimerDialog = false },
+            )
         }
 
         if (state.editingName) {
-            val dev = viewModel.selectedDevice()
+            val dev = selectedDevice
             if (dev != null) {
                 EditNameDialog(
                     currentName = dev.name,
@@ -239,30 +367,13 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
         }
 
         if (state.movingRoom) {
-            val dev = viewModel.selectedDevice()
+            val dev = selectedDevice
             if (dev != null) {
                 MoveRoomDialog(
                     rooms = state.roomList,
                     currentRoom = dev.room,
                     onConfirm = { newRoom -> viewModel.moveDeviceToRoom(dev.topic, newRoom) },
                     onDismiss = { viewModel.showMoveRoomDialog(false) },
-                )
-            }
-        }
-
-        if (state.showTimerPage) {
-            val dev = viewModel.selectedDevice()
-            if (dev != null) {
-                TimerPage(
-                    device = dev,
-                    timers = state.timerList,
-                    loading = state.timerLoading,
-                    addingTimer = state.addingTimer,
-                    onRefresh = viewModel::refreshTimers,
-                    onAddTimer = viewModel::addTimer,
-                    onToggleTimer = viewModel::toggleTimer,
-                    onDeleteTimer = viewModel::deleteTimer,
-                    onDismiss = { viewModel.showTimerPage(false) },
                 )
             }
         }
@@ -530,128 +641,78 @@ private fun appTopAppBarColors() = TopAppBarDefaults.topAppBarColors(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimerPage(
-    device: OutletDevice,
+private fun TimerContent(
     timers: List<BemfaTimer>,
     loading: Boolean,
-    addingTimer: Boolean,
-    onRefresh: () -> Unit,
-    onAddTimer: (String, String, List<Int>) -> Unit,
     onToggleTimer: (Int, Boolean) -> Unit,
     onDeleteTimer: (Int) -> Unit,
-    onDismiss: () -> Unit,
 ) {
-    var showAddDialog by remember { mutableStateOf(false) }
     var pendingDeleteTimerId by remember { mutableStateOf<Int?>(null) }
 
-    BackHandler { onDismiss() }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = appTopAppBarColors(),
-                title = { Text("定时任务", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onRefresh, enabled = !loading) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "刷新")
-                    }
-                },
+    if (loading) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    }
+    if (timers.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "暂无定时任务",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "添加定时任务")
-            }
-        },
-    ) { padding ->
-        if (loading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
-        if (timers.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "暂无定时任务",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                lazyColumnItems(timers, key = { it.id }) { timer ->
-                    BemfaCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = timer.time,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                )
-                                Switch(
-                                    checked = timer.isEnabled,
-                                    onCheckedChange = { onToggleTimer(timer.id, it) },
-                                )
-                            }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            lazyColumnItems(timers, key = { it.id }) { timer ->
+                BemfaCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
-                                text = "消息: ${timer.msg}",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = timer.time,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
                             )
-                            val weekNames = listOf("日", "一", "二", "三", "四", "五", "六")
-                            val weekText = if (timer.week.size == 7) "每天"
-                                else if (timer.week.isEmpty()) "不重复"
-                                else timer.week.sorted().joinToString(" ") { "周${weekNames[it]}" }
-                            Text(
-                                text = weekText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Switch(
+                                checked = timer.isEnabled,
+                                onCheckedChange = { onToggleTimer(timer.id, it) },
                             )
-                            TextButton(
-                                onClick = { pendingDeleteTimerId = timer.id },
-                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error,
-                                ),
-                            ) {
-                                Text("删除")
-                            }
+                        }
+                        Text(
+                            text = "消息: ${timer.msg}",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        val weekNames = listOf("日", "一", "二", "三", "四", "五", "六")
+                        val weekText = if (timer.week.size == 7) "每天"
+                            else if (timer.week.isEmpty()) "不重复"
+                            else timer.week.sorted().joinToString(" ") { "周${weekNames[it]}" }
+                        Text(
+                            text = weekText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(
+                            onClick = { pendingDeleteTimerId = timer.id },
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Text("删除")
                         }
                     }
                 }
             }
         }
-    }
-
-    if (showAddDialog) {
-        AddTimerDialog(
-            onConfirm = { time, msg, week ->
-                onAddTimer(time, msg, week)
-                showAddDialog = false
-            },
-            onDismiss = { showAddDialog = false },
-        )
     }
 
     pendingDeleteTimerId?.let { timerId ->
@@ -834,7 +895,6 @@ private fun AddTimerDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun DeviceListContent(
     state: DevicesUiState,
@@ -1133,7 +1193,6 @@ private fun DeviceDetailContent(
     device: OutletDevice?,
     detailLoading: Boolean,
     timerCount: Int?,
-    onDismiss: () -> Unit,
     onToggle: (String, Boolean) -> Unit,
     onCopyTopic: (String) -> Unit,
     onRefresh: () -> Unit,
@@ -1142,324 +1201,273 @@ private fun DeviceDetailContent(
     onShowTimer: () -> Unit,
 ) {
     if (device == null) {
-        onDismiss()
         return
     }
 
-    BackHandler { onDismiss() }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = appTopAppBarColors(),
-                title = { Text(device.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onRefresh, enabled = !detailLoading) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "刷新",
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        if (detailLoading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    if (detailLoading) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = device.name,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        DeviceStatusBadge(
+            isPending = false,
+            isOnline = device.isOnline,
+            isOn = device.isOn,
+        )
+        BemfaCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = device.topic,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { onCopyTopic(device.topic) }) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = "复制",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        BemfaCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                DetailText("房间", device.room)
+                DetailText("在线状态", if (device.isOnline) "在线" else "离线")
+                DetailText("当前状态", if (device.isOn) "开启" else "关闭")
+                DetailText("最近消息时间", device.lastMessageTime ?: "无")
+            }
+        }
+        BemfaCard(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onShowTimer,
         ) {
-            Text(
-                text = device.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            DeviceStatusBadge(
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "定时任务",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = when {
+                            timerCount == null -> "加载中"
+                            timerCount == 0 -> "未设置"
+                            else -> "$timerCount 个"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowRight,
+                    contentDescription = "查看定时任务",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            DevicePowerButton(
+                size = 72.dp,
+                iconSize = 34.dp,
                 isPending = false,
                 isOnline = device.isOnline,
                 isOn = device.isOn,
+                onToggle = { onToggle(device.topic, !device.isOn) },
             )
-            BemfaCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = device.topic,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { onCopyTopic(device.topic) }) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = "复制",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            BemfaCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    DetailText("房间", device.room)
-                    DetailText("在线状态", if (device.isOnline) "在线" else "离线")
-                    DetailText("当前状态", if (device.isOn) "开启" else "关闭")
-                    DetailText("最近消息时间", device.lastMessageTime ?: "无")
-                }
-            }
-            BemfaCard(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onShowTimer,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "定时任务",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            text = when {
-                                timerCount == null -> "加载中"
-                                timerCount == 0 -> "未设置"
-                                else -> "$timerCount 个"
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowRight,
-                        contentDescription = "查看定时任务",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                DevicePowerButton(
-                    size = 72.dp,
-                    iconSize = 34.dp,
-                    isPending = false,
-                    isOnline = device.isOnline,
-                    isOn = device.isOn,
-                    onToggle = { onToggle(device.topic, !device.isOn) },
-                )
-            }
-            Text(
-                text = if (!device.isOnline) "设备离线" else if (device.isOn) "已开启" else "已关闭",
-                style = MaterialTheme.typography.bodyLarge,
-                color = when {
-                    !device.isOnline -> MaterialTheme.colorScheme.error
-                    device.isOn -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                FilledTonalButton(
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-                    modifier = Modifier.weight(1f),
-                    onClick = onEditName,
-                ) { Text("编辑昵称") }
-                FilledTonalButton(
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    modifier = Modifier.weight(1f),
-                    onClick = onMoveRoom,
-                ) { Text("移动房间") }
-            }
+        }
+        Text(
+            text = if (!device.isOnline) "设备离线" else if (device.isOn) "已开启" else "已关闭",
+            style = MaterialTheme.typography.bodyLarge,
+            color = when {
+                !device.isOnline -> MaterialTheme.colorScheme.error
+                device.isOn -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FilledTonalButton(
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+                modifier = Modifier.weight(1f),
+                onClick = onEditName,
+            ) { Text("编辑昵称") }
             FilledTonalButton(
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onShowTimer,
-            ) { Text("定时任务") }
+                modifier = Modifier.weight(1f),
+                onClick = onMoveRoom,
+            ) { Text("移动房间") }
         }
+        FilledTonalButton(
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onShowTimer,
+        ) { Text("定时任务") }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(
+private fun SettingsContent(
     state: DevicesUiState,
-    onDismiss: () -> Unit,
     onAutoUpdateChange: (Boolean) -> Unit,
     onProxyFirstChange: (Boolean) -> Unit,
     onCheckUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onDismissUpdate: () -> Unit,
 ) {
-    BackHandler { onDismiss() }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = appTopAppBarColors(),
-                title = { Text("设置") },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Text("更新", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            }
-            item {
-                BemfaCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("启动时检查更新")
-                            Switch(checked = state.autoUpdate, onCheckedChange = onAutoUpdateChange)
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("加速下载优先")
-                            Switch(checked = state.proxyFirst, onCheckedChange = onProxyFirstChange)
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = onCheckUpdate,
-                            enabled = !state.updateChecking,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            if (state.updateChecking) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            } else {
-                                Text("检查更新")
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                BemfaCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("当前版本", style = MaterialTheme.typography.labelMedium)
-                        Text(
-                            text = com.tomcat927.bemfacontrol.BuildConfig.VERSION_NAME,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("项目地址", style = MaterialTheme.typography.labelMedium)
-                        val context = LocalContext.current
-                        Text(
-                            text = "github.com/tomcat927/bemfa-control",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable {
-                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tomcat927/bemfa-control"))
-                                context.startActivity(intent)
-                            },
-                        )
-                    }
-                }
-            }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text("更新", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         }
-
-        if (state.updateInfo != null) {
-            AlertDialog(
-                onDismissRequest = onDismissUpdate,
-                title = { Text("发现新版本") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = state.updateInfo!!.versionName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = state.updateInfo!!.releaseNotes,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = onDownloadUpdate,
-                        enabled = !state.updateDownloading,
+        item {
+            BemfaCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (state.updateDownloading) {
+                        Text("启动时检查更新")
+                        Switch(checked = state.autoUpdate, onCheckedChange = onAutoUpdateChange)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("加速下载优先")
+                        Switch(checked = state.proxyFirst, onCheckedChange = onProxyFirstChange)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onCheckUpdate,
+                        enabled = !state.updateChecking,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (state.updateChecking) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
                             )
                         } else {
-                            Text("下载并安装")
+                            Text("检查更新")
                         }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismissUpdate) {
-                        Text("稍后")
-                    }
-                },
-            )
+                }
+            }
         }
+        item {
+            BemfaCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("当前版本", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = com.tomcat927.bemfacontrol.BuildConfig.VERSION_NAME,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("项目地址", style = MaterialTheme.typography.labelMedium)
+                    val context = LocalContext.current
+                    Text(
+                        text = "github.com/tomcat927/bemfa-control",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tomcat927/bemfa-control"))
+                            context.startActivity(intent)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    if (state.updateInfo != null) {
+        AlertDialog(
+            onDismissRequest = onDismissUpdate,
+            title = { Text("发现新版本") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = state.updateInfo!!.versionName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = state.updateInfo!!.releaseNotes,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = onDownloadUpdate,
+                    enabled = !state.updateDownloading,
+                ) {
+                    if (state.updateDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text("下载并安装")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUpdate) {
+                    Text("稍后")
+                }
+            },
+        )
     }
 }
 
