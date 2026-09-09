@@ -1,6 +1,7 @@
 package com.tomcat927.bemfacontrol.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.Shapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -140,7 +141,7 @@ private val AppTypography = Typography(
     ),
 )
 
-private val AppShapes = androidx.compose.foundation.shape.Shapes(
+private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(14.dp),

@@ -483,6 +483,7 @@ private fun RoomManageDialog(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun BemfaCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
@@ -510,6 +511,7 @@ private fun BemfaCard(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun appTopAppBarColors() = TopAppBarDefaults.topAppBarColors(
     containerColor = MaterialTheme.colorScheme.background,
