@@ -7,6 +7,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,10 +15,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,8 +49,11 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import com.tomcat927.bemfacontrol.data.model.BemfaRoom
 import com.tomcat927.bemfacontrol.data.model.BemfaTimer
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +77,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,7 +95,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
@@ -111,8 +115,10 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = appTopAppBarColors(),
                 title = { Text("巴法智控") },
                 actions = {
                     if (state.lastSyncTime != null) {
@@ -476,6 +482,42 @@ private fun RoomManageDialog(
     )
 }
 
+@Composable
+private fun BemfaCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val cardModifier = if (onClick != null) {
+        modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        )
+    } else {
+        modifier
+    }
+
+    Card(
+        modifier = cardModifier,
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        content = content,
+    )
+}
+
+@Composable
+private fun appTopAppBarColors() = TopAppBarDefaults.topAppBarColors(
+    containerColor = MaterialTheme.colorScheme.background,
+    titleContentColor = MaterialTheme.colorScheme.onBackground,
+    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimerPage(
@@ -494,8 +536,10 @@ private fun TimerPage(
 
     BackHandler { onDismiss() }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = appTopAppBarColors(),
                 title = { Text("定时任务", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
@@ -513,6 +557,7 @@ private fun TimerPage(
             FloatingActionButton(
                 onClick = { showAddDialog = true },
                 containerColor = MaterialTheme.colorScheme.primary,
+                shape = MaterialTheme.shapes.medium,
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "添加定时任务")
             }
@@ -543,7 +588,7 @@ private fun TimerPage(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 lazyColumnItems(timers, key = { it.id }) { timer ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    BemfaCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -806,7 +851,7 @@ private fun DeviceListContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -823,7 +868,8 @@ private fun DeviceListContent(
         SingleChoiceSegmentedButtonRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 16.dp)
+                .height(40.dp),
         ) {
             SegmentedButton(
                 selected = state.viewMode == ViewMode.ROOM,
@@ -885,9 +931,9 @@ private fun DeviceListContent(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(displayDevices, key = { it.topic }) { device ->
                     OutletGridCard(
@@ -912,124 +958,160 @@ private fun OutletGridCard(
     onClick: () -> Unit,
     onLongPress: () -> Unit,
 ) {
-    Card(
+    BemfaCard(
         modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongPress,
-            ),
+            .fillMaxWidth(),
+        onClick = onClick,
+        onLongClick = onLongPress,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(14.dp),
         ) {
-            // Name - up to 2 lines, no truncation
-            Text(
-                text = device.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // Topic - full display, small monospace
-            Text(
-                text = device.topic,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-            )
-
-            // Status + time row
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = device.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = device.topic,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+
+                DeviceStatusBadge(
+                    isPending = isPending,
+                    isOnline = device.isOnline,
+                    isOn = device.isOn,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val statusText = when {
-                    isPending -> "处理中"
-                    !device.isOnline -> "离线"
-                    device.isOn -> "开启"
-                    else -> "关闭"
-                }
-                val statusColor = when {
-                    !device.isOnline -> MaterialTheme.colorScheme.error
-                    device.isOn -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
                 Text(
-                    text = statusText,
+                    text = device.lastMessageTime?.let { time -> time.substringAfter(' ').take(5) } ?: "无记录",
                     style = MaterialTheme.typography.labelSmall,
-                    color = statusColor,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                device.lastMessageTime?.let { time ->
-                    val timeOnly = time.substringAfter(' ').take(5)
-                    Text(
-                        text = "  $timeOnly",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Circular power button
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (device.isOn && device.isOnline && !isPending) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            Color.Transparent
-                        }
-                    )
-                    .border(
-                        width = 2.dp,
-                        color = when {
-                            !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
-                            device.isOn -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.outline
-                        },
-                        shape = CircleShape,
-                    )
-                    .clickable(enabled = !isPending && device.isOnline) {
-                        onToggle(device.topic, !device.isOn)
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isPending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.PowerSettingsNew,
-                        contentDescription = "电源",
-                        tint = when {
-                            !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
-                            device.isOn -> MaterialTheme.colorScheme.onPrimary
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
+                DevicePowerButton(
+                    size = 52.dp,
+                    iconSize = 26.dp,
+                    isPending = isPending,
+                    isOnline = device.isOnline,
+                    isOn = device.isOn,
+                    onToggle = { onToggle(device.topic, !device.isOn) },
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun DeviceStatusBadge(
+    isPending: Boolean,
+    isOnline: Boolean,
+    isOn: Boolean,
+) {
+    val text = when {
+        isPending -> "处理中"
+        !isOnline -> "离线"
+        isOn -> "开启"
+        else -> "关闭"
+    }
+    val containerColor = when {
+        isPending -> MaterialTheme.colorScheme.secondaryContainer
+        !isOnline -> MaterialTheme.colorScheme.errorContainer
+        isOn -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = when {
+        isPending -> MaterialTheme.colorScheme.onSecondaryContainer
+        !isOnline -> MaterialTheme.colorScheme.onErrorContainer
+        isOn -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(containerColor)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor,
+        )
+    }
+}
+
+@Composable
+private fun DevicePowerButton(
+    size: androidx.compose.ui.unit.Dp,
+    iconSize: androidx.compose.ui.unit.Dp,
+    isPending: Boolean,
+    isOnline: Boolean,
+    isOn: Boolean,
+    onToggle: () -> Unit,
+) {
+    val containerColor = if (isOn && isOnline && !isPending) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val borderColor = when {
+        isOn && isOnline && !isPending -> MaterialTheme.colorScheme.primary
+        isPending -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.outlineVariant
+    }
+    val iconColor = when {
+        isOn && isOnline && !isPending -> MaterialTheme.colorScheme.onPrimary
+        isPending -> MaterialTheme.colorScheme.onPrimaryContainer
+        !isOnline -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(containerColor)
+            .border(width = 1.dp, color = borderColor, shape = CircleShape)
+            .clickable(enabled = !isPending && isOnline, onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isPending) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(iconSize * 0.7f),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.PowerSettingsNew,
+                contentDescription = "电源",
+                tint = iconColor,
+                modifier = Modifier.size(iconSize),
+            )
         }
     }
 }
@@ -1054,8 +1136,10 @@ private fun DeviceDetailContent(
 
     BackHandler { onDismiss() }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = appTopAppBarColors(),
                 title = { Text(device.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
@@ -1092,11 +1176,16 @@ private fun DeviceDetailContent(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
-            Card(modifier = Modifier.fillMaxWidth()) {
+            DeviceStatusBadge(
+                isPending = false,
+                isOnline = device.isOnline,
+                isOn = device.isOn,
+            )
+            BemfaCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
+                        .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -1114,52 +1203,31 @@ private fun DeviceDetailContent(
                     }
                 }
             }
-            HorizontalDivider()
-            DetailText("房间", device.room)
-            DetailText("在线状态", if (device.isOnline) "在线" else "离线")
-            DetailText("当前状态", if (device.isOn) "开启" else "关闭")
-            DetailText("最近消息时间", device.lastMessageTime ?: "无")
-            HorizontalDivider()
+            BemfaCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    DetailText("房间", device.room)
+                    DetailText("在线状态", if (device.isOnline) "在线" else "离线")
+                    DetailText("当前状态", if (device.isOn) "开启" else "关闭")
+                    DetailText("最近消息时间", device.lastMessageTime ?: "无")
+                }
+            }
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (device.isOn && device.isOnline) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                Color.Transparent
-                            }
-                        )
-                        .border(
-                            width = 2.dp,
-                            color = when {
-                                !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
-                                device.isOn -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.outline
-                            },
-                            shape = CircleShape,
-                        )
-                        .clickable(enabled = device.isOnline) {
-                            onToggle(device.topic, !device.isOn)
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PowerSettingsNew,
-                        contentDescription = "电源",
-                        tint = when {
-                            !device.isOnline -> MaterialTheme.colorScheme.outlineVariant
-                            device.isOn -> MaterialTheme.colorScheme.onPrimary
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
+                DevicePowerButton(
+                    size = 72.dp,
+                    iconSize = 34.dp,
+                    isPending = false,
+                    isOnline = device.isOnline,
+                    isOn = device.isOn,
+                    onToggle = { onToggle(device.topic, !device.isOn) },
+                )
             }
             Text(
                 text = if (!device.isOnline) "设备离线" else if (device.isOn) "已开启" else "已关闭",
@@ -1177,16 +1245,28 @@ private fun DeviceDetailContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedButton(
+                FilledTonalButton(
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
                     modifier = Modifier.weight(1f),
                     onClick = onEditName,
                 ) { Text("编辑昵称") }
-                OutlinedButton(
+                FilledTonalButton(
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
                     modifier = Modifier.weight(1f),
                     onClick = onMoveRoom,
                 ) { Text("移动房间") }
             }
-            OutlinedButton(
+            FilledTonalButton(
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onShowTimer,
             ) { Text("定时任务") }
@@ -1207,8 +1287,10 @@ private fun SettingsScreen(
 ) {
     BackHandler { onDismiss() }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = appTopAppBarColors(),
                 title = { Text("设置") },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
@@ -1232,7 +1314,7 @@ private fun SettingsScreen(
                 Text("更新", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                BemfaCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1269,7 +1351,7 @@ private fun SettingsScreen(
                 }
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                BemfaCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("当前版本", style = MaterialTheme.typography.labelMedium)
                         Text(
@@ -1459,6 +1541,7 @@ private fun SetupContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
