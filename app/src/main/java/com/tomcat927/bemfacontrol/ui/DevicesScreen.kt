@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -167,6 +168,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                 state.selectedDeviceTopic != null -> DeviceDetailContent(
                     device = viewModel.selectedDevice(),
                     detailLoading = state.detailLoading,
+                    timerCount = state.timerCountByTopic[state.selectedDeviceTopic],
                     onDismiss = { viewModel.selectDevice(null) },
                     onToggle = viewModel::setPower,
                     onCopyTopic = { topic ->
@@ -1124,6 +1126,7 @@ private fun DevicePowerButton(
 private fun DeviceDetailContent(
     device: OutletDevice?,
     detailLoading: Boolean,
+    timerCount: Int?,
     onDismiss: () -> Unit,
     onToggle: (String, Boolean) -> Unit,
     onCopyTopic: (String) -> Unit,
@@ -1217,6 +1220,39 @@ private fun DeviceDetailContent(
                     DetailText("在线状态", if (device.isOnline) "在线" else "离线")
                     DetailText("当前状态", if (device.isOn) "开启" else "关闭")
                     DetailText("最近消息时间", device.lastMessageTime ?: "无")
+                }
+            }
+            BemfaCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onShowTimer,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "定时任务",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = when {
+                                timerCount == null -> "加载中"
+                                timerCount == 0 -> "未设置"
+                                else -> "$timerCount 个"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowRight,
+                        contentDescription = "查看定时任务",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
+                    )
                 }
             }
             Box(

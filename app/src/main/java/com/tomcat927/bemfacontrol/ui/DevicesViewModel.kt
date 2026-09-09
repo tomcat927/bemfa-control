@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 data class DevicesUiState(
@@ -53,6 +54,7 @@ data class DevicesUiState(
     val renamingRoom: Boolean = false,
     val showTimerPage: Boolean = false,
     val timerList: List<BemfaTimer> = emptyList(),
+    val timerCountByTopic: Map<String, Int> = emptyMap(),
     val timerLoading: Boolean = false,
     val addingTimer: Boolean = false,
 )
@@ -206,21 +208,39 @@ class DevicesViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(detailLoading = true) }
-            runCatching { outletRepository.checkOnline(uid, topic) }
-                .onSuccess { online ->
-                    _uiState.update { state ->
-                        state.copy(
-                            detailLoading = false,
-                            allDevices = state.allDevices.map { device ->
-                                if (device.topic == topic) device.copy(isOnline = online) else device
-                            },
-                        )
-                    }
+            coroutineScope {
+                launch {
+                    runCatching { outletRepository.checkOnline(uid, topic) }
+                        .onSuccess { online ->
+                            _uiState.update { state ->
+                                state.copy(
+                                    allDevices = state.allDevices.map { device ->
+                                        if (device.topic == topic) device.copy(isOnline = online) else device
+                                    },
+                                )
+                            }
+                        }
+                        .onFailure { throwable ->
+                            RuntimeLog.error("detail online check failed: topic=$topic", throwable)
+                        }
                 }
-                .onFailure { throwable ->
-                    RuntimeLog.error("detail online check failed: topic=$topic", throwable)
-                    _uiState.update { it.copy(detailLoading = false) }
+
+                launch {
+                    runCatching { outletRepository.timers(uid, topic) }
+                        .onSuccess { timers ->
+                            _uiState.update { state ->
+                                state.copy(
+                                    timerList = timers,
+                                    timerCountByTopic = state.timerCountByTopic + (topic to timers.size),
+                                )
+                            }
+                        }
+                        .onFailure { throwable ->
+                            RuntimeLog.error("detail timer summary failed: topic=$topic", throwable)
+                        }
                 }
+            }
+            _uiState.update { it.copy(detailLoading = false) }
         }
     }
 
@@ -374,7 +394,13 @@ class DevicesViewModel(
             _uiState.update { it.copy(timerLoading = true) }
             runCatching { outletRepository.timers(uid, topic) }
                 .onSuccess { timers ->
-                    _uiState.update { it.copy(timerList = timers, timerLoading = false) }
+                    _uiState.update { state ->
+                        state.copy(
+                            timerList = timers,
+                            timerLoading = false,
+                            timerCountByTopic = state.timerCountByTopic + (topic to timers.size),
+                        )
+                    }
                 }
                 .onFailure { throwable ->
                     RuntimeLog.error("loadTimers failed", throwable)
