@@ -962,13 +962,14 @@ private fun OutletGridCard(
 ) {
     BemfaCard(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .height(168.dp),
         onClick = onClick,
         onLongClick = onLongPress,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(14.dp),
         ) {
             Row(
@@ -1001,7 +1002,7 @@ private fun OutletGridCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
