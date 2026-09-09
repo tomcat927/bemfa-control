@@ -2,11 +2,16 @@ name: Android Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: true
 
 jobs:
   release:
@@ -16,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -25,6 +32,23 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          TZ="Asia/Shanghai"
+          VERSION_NAME=$(TZ="$TZ" date +"%Y.%m.%d.%H%M")
+          VERSION_CODE=$(TZ="$TZ" date +"%Y%m%d%H%M")
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Generated version: v$VERSION_NAME (code: $VERSION_CODE)"
+
+      - name: Run unit tests
+        env:
+          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Decode signing keystore
         env:
@@ -43,12 +67,14 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Prepare release assets
         id: assets
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
         run: |
           APK_NAME="bemfa-control-${TAG_NAME}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK_NAME"
@@ -60,15 +86,17 @@ jobs:
           echo "github_url=$GITHUB_URL" >> "$GITHUB_OUTPUT"
           echo "proxy_url=$PROXY_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release
+      - name: Create tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
           APK_NAME: ${{ steps.assets.outputs.apk }}
           CHECKSUM_NAME: ${{ steps.assets.outputs.checksum }}
           GITHUB_URL: ${{ steps.assets.outputs.github_url }}
           PROXY_URL: ${{ steps.assets.outputs.proxy_url }}
         run: |
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
           cat > release-notes.md <<EOF
           ## Android APK 下载
 
@@ -86,3 +114,19 @@ jobs:
             --title "$TAG_NAME" \
             --notes-file release-notes.md \
             "$APK_NAME" "$CHECKSUM_NAME"
+
+      - name: Cleanup old releases (keep 10)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Fetching all releases sorted by creation time..."
+          mapfile -t RELEASES < <(gh release list --limit 100 --json tagName,createdAt --jq '.[] | "\(.createdAt) \(.tagName)"' | sort -r)
+          TOTAL=${#RELEASES[@]}
+          echo "Found $TOTAL releases, keeping 10, removing $(($TOTAL - 10)) old ones"
+          for ((i=10; i<TOTAL; i++)); do
+            LINE="${RELEASES[$i]}"
+            OLD_TAG=$(echo "$LINE" | awk '{print $2}')
+            echo "Deleting release and tag: $OLD_TAG"
+            gh release delete "$OLD_TAG" --yes --cleanup-tag || echo "Failed to delete $OLD_TAG"
+          done
+          echo "Cleanup done"

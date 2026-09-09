@@ -13,8 +13,10 @@ android {
         applicationId = "com.tomcat927.bemfacontrol"
         minSdk = 26
         targetSdk = 34
-        versionCode = 27
-        versionName = "2026.09.09.1035"
+        val ciVersionName = System.getenv("APP_VERSION_NAME")
+        val ciVersionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull()
+        versionCode = ciVersionCode ?: 27
+        versionName = ciVersionName ?: "2026.09.09.1035"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
