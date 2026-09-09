@@ -47,7 +47,14 @@ object BemfaTopicListSerializer : KSerializer<BemfaTopicList> {
         val element = (decoder as JsonDecoder).decodeJsonElement()
         val topicsElement = when (element) {
             is JsonArray -> element
-            is JsonObject -> element["data"] as? JsonArray ?: JsonArray(emptyList())
+            is JsonObject -> {
+                val data = element["data"]
+                when (data) {
+                    is JsonArray -> data
+                    is JsonObject -> data["data"] as? JsonArray ?: JsonArray(emptyList())
+                    else -> JsonArray(emptyList())
+                }
+            }
             else -> JsonArray(emptyList())
         }
         return BemfaTopicList(decoder.json.decodeFromJsonElement(delegate, topicsElement))
