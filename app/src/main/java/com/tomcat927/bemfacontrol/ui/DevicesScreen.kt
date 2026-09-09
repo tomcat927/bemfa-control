@@ -363,7 +363,6 @@ private fun TimerPage(
     onDismiss: () -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
-    var pendingDeleteTimerId by remember { mutableStateOf<Int?>(null) }
 
     BackHandler { onDismiss() }
     Scaffold(
@@ -448,7 +447,7 @@ private fun TimerPage(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             TextButton(
-                                onClick = { pendingDeleteTimerId = timer.id },
+                                onClick = { onDeleteTimer(timer.id) },
                                 colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
@@ -469,32 +468,6 @@ private fun TimerPage(
                 showAddDialog = false
             },
             onDismiss = { showAddDialog = false },
-        )
-    }
-
-    pendingDeleteTimerId?.let { timerId ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteTimerId = null },
-            title = { Text("删除定时任务") },
-            text = { Text("确定删除该定时任务吗？删除后不可恢复。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteTimer(timerId)
-                        pendingDeleteTimerId = null
-                    },
-                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Text("删除")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteTimerId = null }) {
-                    Text("取消")
-                }
-            },
         )
     }
 }
