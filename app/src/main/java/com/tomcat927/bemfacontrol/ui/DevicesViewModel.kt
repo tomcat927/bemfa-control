@@ -75,12 +75,21 @@ class DevicesViewModel(
             val enabled = settingsStore.debugLogging()
             RuntimeLog.enabled = enabled
             val order = settingsStore.roomOrder()
-            _uiState.update { it.copy(debugEnabled = enabled, autoUpdate = settingsStore.autoUpdate(), proxyFirst = settingsStore.proxyFirst(), roomOrder = order) }
+            val lastRoom = settingsStore.lastRoom()
+            _uiState.update {
+                it.copy(
+                    debugEnabled = enabled,
+                    autoUpdate = settingsStore.autoUpdate(),
+                    proxyFirst = settingsStore.proxyFirst(),
+                    roomOrder = order,
+                    selectedRoom = lastRoom,
+                )
+            }
             if (settingsStore.autoUpdate()) {
                 checkForUpdate()
             }
+            refresh()
         }
-        refresh()
     }
 
     fun refresh() {
@@ -99,6 +108,15 @@ class DevicesViewModel(
             runCatching { outletRepository.groups(uid, order) }
                 .onSuccess { groups ->
                     RuntimeLog.debug("sync success: ${groups.sumOf { it.devices.size }} devices")
+                    val validSelectedRoom = _uiState.value.selectedRoom?.takeIf { room ->
+                        groups.any { group -> group.room == room }
+                    }
+                    if (_uiState.value.selectedRoom != validSelectedRoom) {
+                        runCatching { settingsStore.setLastRoom(validSelectedRoom) }
+                            .onFailure { throwable ->
+                                RuntimeLog.error("clear invalid last room failed", throwable)
+                            }
+                    }
                     _uiState.update { state ->
                         val allDevices = groups.flatMap { it.devices }
                         val rooms = groups.map { it.room }.distinct()
@@ -110,6 +128,7 @@ class DevicesViewModel(
                             allDevices = allDevices,
                             rooms = orderedGroups.map { it.room },
                             roomOrder = mergedOrder,
+                            selectedRoom = validSelectedRoom,
                             lastSyncTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date()),
                             totalCount = groups.sumOf { group -> group.devices.size },
                             onlineCount = groups.sumOf { group ->
@@ -190,6 +209,12 @@ class DevicesViewModel(
 
     fun selectRoom(room: String?) {
         _uiState.update { it.copy(selectedRoom = room) }
+        viewModelScope.launch {
+            runCatching { settingsStore.setLastRoom(room) }
+                .onFailure { throwable ->
+                    RuntimeLog.error("save last room failed", throwable)
+                }
+        }
     }
 
     fun setViewMode(mode: ViewMode) {

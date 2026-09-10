@@ -21,6 +21,7 @@ class AppSettingsStore(private val context: Context) {
     private val autoUpdateKey = booleanPreferencesKey("auto_update")
     private val proxyFirstKey = booleanPreferencesKey("proxy_first")
     private val roomOrderKey = stringPreferencesKey("room_order")
+    private val lastRoomKey = stringPreferencesKey("last_selected_room")
 
     private val roomOrderJson = Json { encodeDefaults = true }
 
@@ -80,6 +81,23 @@ class AppSettingsStore(private val context: Context) {
         val encoded = roomOrderJson.encodeToString(ListSerializer(String.serializer()), order)
         context.settingsDataStore.edit { preferences ->
             preferences[roomOrderKey] = encoded
+        }
+    }
+
+    fun lastRoomFlow(): Flow<String?> =
+        context.settingsDataStore.data.map { preferences ->
+            preferences[lastRoomKey]?.takeIf { it.isNotBlank() }
+        }
+
+    suspend fun lastRoom(): String? = lastRoomFlow().first()
+
+    suspend fun setLastRoom(room: String?) {
+        context.settingsDataStore.edit { preferences ->
+            if (room.isNullOrBlank()) {
+                preferences.remove(lastRoomKey)
+            } else {
+                preferences[lastRoomKey] = room
+            }
         }
     }
 }
