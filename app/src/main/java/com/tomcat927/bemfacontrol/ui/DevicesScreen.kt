@@ -116,6 +116,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     val context = LocalContext.current
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     var showAddTimerDialog by remember { mutableStateOf(false) }
+    var editingTimer by remember { mutableStateOf<BemfaTimer?>(null) }
 
     LaunchedEffect(state.message) {
         state.message?.let { message ->
@@ -136,6 +137,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     LaunchedEffect(currentPage) {
         if (currentPage != DevicesPage.TIMER) {
             showAddTimerDialog = false
+            editingTimer = null
         }
     }
 
@@ -147,6 +149,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     }
     BackHandler(enabled = currentPage == DevicesPage.TIMER) {
         showAddTimerDialog = false
+        editingTimer = null
         viewModel.showTimerPage(false)
     }
 
@@ -226,6 +229,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     navigationIcon = {
                         IconButton(onClick = {
                             showAddTimerDialog = false
+                            editingTimer = null
                             viewModel.showTimerPage(false)
                         }) {
                             Icon(
@@ -261,7 +265,10 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
         floatingActionButton = {
             if (currentPage == DevicesPage.TIMER) {
                 FloatingActionButton(
-                    onClick = { showAddTimerDialog = true },
+                    onClick = {
+                        editingTimer = null
+                        showAddTimerDialog = true
+                    },
                     containerColor = MaterialTheme.colorScheme.primary,
                     shape = MaterialTheme.shapes.medium,
                 ) {
@@ -310,6 +317,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onMoveRoom = { viewModel.showMoveRoomDialog(true) },
                     onShowTimer = {
                         showAddTimerDialog = false
+                        editingTimer = null
                         viewModel.showTimerPage(true)
                     },
                 )
@@ -319,6 +327,10 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     loading = state.timerLoading,
                     onToggleTimer = viewModel::toggleTimer,
                     onDeleteTimer = viewModel::deleteTimer,
+                    onEditTimer = { timer ->
+                        editingTimer = timer
+                        showAddTimerDialog = true
+                    },
                 )
 
                 DevicesPage.SETTINGS -> SettingsContent(
@@ -345,11 +357,22 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
 
         if (showAddTimerDialog) {
             AddTimerDialog(
+                timer = editingTimer,
+                saving = state.addingTimer,
                 onConfirm = { time, msg, week ->
-                    viewModel.addTimer(time, msg, week)
+                    val timer = editingTimer
+                    if (timer == null) {
+                        viewModel.addTimer(time, msg, week)
+                    } else {
+                        viewModel.editTimer(timer, time, msg, week)
+                    }
                     showAddTimerDialog = false
+                    editingTimer = null
                 },
-                onDismiss = { showAddTimerDialog = false },
+                onDismiss = {
+                    showAddTimerDialog = false
+                    editingTimer = null
+                },
             )
         }
 
@@ -684,6 +707,7 @@ private fun TimerContent(
     loading: Boolean,
     onToggleTimer: (Int, Boolean) -> Unit,
     onDeleteTimer: (Int) -> Unit,
+    onEditTimer: (BemfaTimer) -> Unit,
 ) {
     var pendingDeleteTimerId by remember { mutableStateOf<Int?>(null) }
 
@@ -739,13 +763,24 @@ private fun TimerContent(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        TextButton(
-                            onClick = { pendingDeleteTimerId = timer.id },
-                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Text("删除")
+                        Row {
+                            TextButton(onClick = { onEditTimer(timer) }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("编辑")
+                            }
+                            TextButton(
+                                onClick = { pendingDeleteTimerId = timer.id },
+                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Text("删除")
+                            }
                         }
                     }
                 }
@@ -782,19 +817,27 @@ private fun TimerContent(
 
 @Composable
 private fun AddTimerDialog(
+    timer: BemfaTimer?,
+    saving: Boolean,
     onConfirm: (String, String, List<Int>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var hour by remember { mutableStateOf("22") }
-    var minute by remember { mutableStateOf("30") }
-    var second by remember { mutableStateOf("00") }
-    var msg by remember { mutableStateOf("on") }
-    val weekDays = remember { mutableStateListOf(true, true, true, true, true, true, true) }
+    val initialTime = timer?.time?.split(":").orEmpty()
+    var hour by remember(timer?.id) { mutableStateOf(initialTime.getOrNull(0) ?: "22") }
+    var minute by remember(timer?.id) { mutableStateOf(initialTime.getOrNull(1) ?: "30") }
+    var second by remember(timer?.id) { mutableStateOf(initialTime.getOrNull(2) ?: "00") }
+    var msg by remember(timer?.id) { mutableStateOf(timer?.msg ?: "on") }
+    val weekDays = remember(timer?.id) {
+        mutableStateListOf<Boolean>().apply {
+            addAll((1..6).map { day -> timer?.week?.contains(day) ?: true })
+            add(timer?.week?.contains(0) ?: true)
+        }
+    }
     val weekLabels = listOf("一", "二", "三", "四", "五", "六", "日")
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("新建定时任务") },
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text(if (timer == null) "新建定时任务" else "编辑定时任务") },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -919,16 +962,29 @@ private fun AddTimerDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val time = "$hour:$minute:$second"
-                val week = weekDays.mapIndexedNotNull { index, selected ->
-                    if (selected) (if (index == 6) 0 else index + 1) else null
-                }
-                onConfirm(time, msg, week)
-            }) { Text("添加") }
+            val hourValue = hour.toIntOrNull()
+            val minuteValue = minute.toIntOrNull()
+            val secondValue = second.toIntOrNull()
+            val validTime = hourValue != null && hourValue in 0..23 &&
+                minuteValue != null && minuteValue in 0..59 &&
+                secondValue != null && secondValue in 0..59
+            Button(
+                enabled = validTime && !saving,
+                onClick = {
+                    val time = "%02d:%02d:%02d".format(
+                        requireNotNull(hourValue),
+                        requireNotNull(minuteValue),
+                        requireNotNull(secondValue),
+                    )
+                    val week = weekDays.mapIndexedNotNull { index, selected ->
+                        if (selected) (if (index == 6) 0 else index + 1) else null
+                    }
+                    onConfirm(time, msg, week)
+                },
+            ) { Text(if (saving) "保存中" else if (timer == null) "添加" else "保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !saving) { Text("取消") }
         },
     )
 }

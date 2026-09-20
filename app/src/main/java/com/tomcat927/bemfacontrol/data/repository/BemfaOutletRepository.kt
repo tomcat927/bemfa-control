@@ -184,6 +184,34 @@ class BemfaOutletRepository(
         }
     }
 
+    suspend fun replaceTimer(
+        uid: String,
+        topic: String,
+        original: BemfaTimer,
+        time: String,
+        msg: String,
+        week: List<Int>,
+    ) {
+        val existingTimerIds = timers(uid, topic).mapTo(mutableSetOf()) { it.id }
+        addTimer(uid, topic, time, msg, week)
+
+        val replacement = timers(uid, topic)
+            .filter { it.id !in existingTimerIds }
+            .filter { it.time == time && it.msg == msg && it.week.toSet() == week.toSet() }
+            .maxByOrNull { it.id }
+            ?: throw IllegalStateException("新定时任务已创建，但无法确认新任务，旧任务已保留")
+
+        if (!original.isEnabled && replacement.isEnabled) {
+            toggleTimer(uid, topic, replacement.id, false)
+        }
+
+        try {
+            deleteTimer(uid, topic, original.id)
+        } catch (throwable: Throwable) {
+            throw IllegalStateException("新定时任务已创建，但旧任务删除失败，请手动删除旧任务", throwable)
+        }
+    }
+
     suspend fun toggleTimer(uid: String, topic: String, timerId: Int, enable: Boolean) {
         val startedAt = System.currentTimeMillis()
         try {

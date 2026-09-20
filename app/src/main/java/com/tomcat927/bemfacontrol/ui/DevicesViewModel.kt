@@ -455,6 +455,28 @@ class DevicesViewModel(
         }
     }
 
+    fun editTimer(original: BemfaTimer, time: String, msg: String, week: List<Int>) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(addingTimer = true) }
+            runCatching { outletRepository.replaceTimer(uid, topic, original, time, msg, week) }
+                .onSuccess {
+                    RuntimeLog.info("editTimer success: topic=$topic id=${original.id} time=$time")
+                    _uiState.update { it.copy(addingTimer = false, message = "定时任务已更新") }
+                    loadTimers()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("editTimer failed: id=${original.id}", throwable)
+                    _uiState.update {
+                        it.copy(addingTimer = false, message = throwable.message ?: "更新定时任务失败")
+                    }
+                    loadTimers()
+                }
+        }
+    }
+
     fun toggleTimer(timerId: Int, enable: Boolean) {
         val uid = _uiState.value.uid
         if (uid.isBlank()) return
