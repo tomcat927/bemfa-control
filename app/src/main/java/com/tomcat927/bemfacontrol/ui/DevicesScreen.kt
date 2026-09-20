@@ -91,14 +91,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
+import kotlinx.coroutines.delay
+
+private const val DEVICE_REFRESH_INTERVAL_MS = 10_000L
 
 private enum class DevicesPage {
     SETUP,
@@ -114,9 +120,24 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     var showAddTimerDialog by remember { mutableStateOf(false) }
     var editingTimer by remember { mutableStateOf<BemfaTimer?>(null) }
+
+    LaunchedEffect(lifecycleOwner) {
+        var hasStarted = false
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (hasStarted) {
+                viewModel.refreshSilently()
+            }
+            hasStarted = true
+            while (true) {
+                delay(DEVICE_REFRESH_INTERVAL_MS)
+                viewModel.refreshSilently()
+            }
+        }
+    }
 
     LaunchedEffect(state.message) {
         state.message?.let { message ->

@@ -92,9 +92,15 @@ class DevicesViewModel(
         }
     }
 
-    fun refresh() {
+    fun refresh() = refresh(showLoading = true)
+
+    fun refreshSilently() = refresh(showLoading = false)
+
+    private fun refresh(showLoading: Boolean) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, message = null) }
+            if (showLoading) {
+                _uiState.update { it.copy(isLoading = true, message = null) }
+            }
             val uid = settingsStore.uid()
             if (uid.isBlank()) {
                 _uiState.update {
@@ -142,8 +148,12 @@ class DevicesViewModel(
                     RuntimeLog.error("sync failed", throwable)
                     _uiState.update { state ->
                         state.copy(
-                            isLoading = false,
-                            message = throwable.message ?: "设备同步失败",
+                            isLoading = if (showLoading) false else state.isLoading,
+                            message = if (showLoading) {
+                                throwable.message ?: "设备同步失败"
+                            } else {
+                                state.message
+                            },
                         )
                     }
                 }
