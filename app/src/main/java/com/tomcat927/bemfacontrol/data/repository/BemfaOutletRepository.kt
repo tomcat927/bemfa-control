@@ -147,12 +147,27 @@ class BemfaOutletRepository(
             val response = api.timerList(uid, topic, BemfaApiFactory.tcpDeviceType())
             assertSuccess(response.code, response.message ?: response.msg)
             val result = response.data?.timers.orEmpty()
+                .sortedWith(
+                    compareBy<BemfaTimer> { timerSortValue(it.time) }
+                        .thenBy { it.id },
+                )
             RuntimeLog.debug("timerList success: ${result.size} timers in ${System.currentTimeMillis() - startedAt}ms")
             return result
         } catch (throwable: Throwable) {
             RuntimeLog.error("timerList failed: topic=$topic", throwable)
             throw throwable
         }
+    }
+
+    private fun timerSortValue(time: String): Int {
+        val parts = time.trim().split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull()
+        val minute = parts.getOrNull(1)?.toIntOrNull()
+        val second = parts.getOrNull(2)?.toIntOrNull() ?: 0
+        if (hour == null || minute == null || hour !in 0..23 || minute !in 0..59 || second !in 0..59) {
+            return Int.MAX_VALUE
+        }
+        return hour * 3600 + minute * 60 + second
     }
 
     suspend fun addTimer(uid: String, topic: String, time: String, msg: String, week: List<Int>) {
