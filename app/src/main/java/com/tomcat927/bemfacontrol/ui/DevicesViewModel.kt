@@ -51,6 +51,8 @@ data class DevicesUiState(
     val movingRoom: Boolean = false,
     val roomList: List<BemfaRoom> = emptyList(),
     val showRoomManage: Boolean = false,
+    val showCreateRoom: Boolean = false,
+    val creatingRoom: Boolean = false,
     val renamingRoom: Boolean = false,
     val showTimerPage: Boolean = false,
     val timerList: List<BemfaTimer> = emptyList(),
@@ -546,11 +548,40 @@ class DevicesViewModel(
         _uiState.update { it.copy(showRoomManage = visible) }
     }
 
+    fun showCreateRoom(visible: Boolean) {
+        _uiState.update { it.copy(showCreateRoom = visible, showRoomManage = !visible) }
+    }
+
     fun saveRoomOrder(order: List<String>) {
         viewModelScope.launch {
             settingsStore.setRoomOrder(order)
             _uiState.update { it.copy(roomOrder = order) }
             refresh()
+        }
+    }
+
+    fun createRoom(topic: String, roomName: String) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val trimmed = roomName.trim()
+        if (topic.isBlank() || trimmed.isEmpty()) return
+        if (_uiState.value.rooms.any { it.equals(trimmed, ignoreCase = true) }) {
+            _uiState.update { it.copy(message = "房间已存在") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(creatingRoom = true, message = null) }
+            runCatching { outletRepository.changeRoom(uid, topic, trimmed) }
+                .onSuccess {
+                    RuntimeLog.info("createRoom success: topic=$topic room=$trimmed")
+                    _uiState.update { it.copy(creatingRoom = false, showCreateRoom = false, message = "房间已创建") }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("createRoom failed: room=$trimmed", throwable)
+                    _uiState.update { it.copy(creatingRoom = false, message = throwable.message ?: "创建房间失败") }
+                }
         }
     }
 

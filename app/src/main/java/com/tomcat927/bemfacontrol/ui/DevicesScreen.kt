@@ -466,7 +466,18 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                 renaming = state.renamingRoom,
                 onReorder = viewModel::saveRoomOrder,
                 onRename = viewModel::renameRoom,
+                onCreateRoom = { viewModel.showCreateRoom(true) },
                 onDismiss = { viewModel.showRoomManage(false) },
+            )
+        }
+
+        if (state.showCreateRoom) {
+            CreateRoomDialog(
+                devices = state.allDevices,
+                rooms = state.roomOrder,
+                creating = state.creatingRoom,
+                onConfirm = viewModel::createRoom,
+                onDismiss = { viewModel.showCreateRoom(false) },
             )
         }
     }
@@ -572,11 +583,112 @@ private fun MoveRoomDialog(
 }
 
 @Composable
+private fun CreateRoomDialog(
+    devices: List<OutletDevice>,
+    rooms: List<String>,
+    creating: Boolean,
+    onConfirm: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selectedTopic by remember { mutableStateOf(devices.firstOrNull()?.topic.orEmpty()) }
+    var roomName by remember { mutableStateOf("") }
+    val trimmedRoom = roomName.trim()
+    val roomExists = trimmedRoom.isNotEmpty() && rooms.any { it.equals(trimmedRoom, ignoreCase = true) }
+    val canSubmit = !creating && selectedTopic.isNotBlank() && trimmedRoom.isNotEmpty() && !roomExists
+
+    AlertDialog(
+        onDismissRequest = { if (!creating) onDismiss() },
+        title = { Text("新建房间") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = roomName,
+                    onValueChange = { roomName = it },
+                    label = { Text("新房间名") },
+                    singleLine = true,
+                    enabled = !creating,
+                    isError = roomExists,
+                    supportingText = {
+                        if (roomExists) Text("房间已存在")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text("选择要移入的设备", style = MaterialTheme.typography.labelLarge)
+                if (devices.isEmpty()) {
+                    Text("暂无可移动的设备", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 260.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        devices.forEach { device ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !creating) { selectedTopic = device.topic }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = selectedTopic == device.topic,
+                                    onClick = { selectedTopic = device.topic },
+                                    enabled = !creating,
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = device.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = device.room,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (creating) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text("正在创建...", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedTopic, trimmedRoom) },
+                enabled = canSubmit,
+            ) { Text("创建") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !creating,
+            ) { Text("取消") }
+        },
+    )
+}
+
+@Composable
 private fun RoomManageDialog(
     rooms: List<String>,
     renaming: Boolean,
     onReorder: (List<String>) -> Unit,
     onRename: (String, String) -> Unit,
+    onCreateRoom: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var roomList by remember(rooms) { mutableStateOf(rooms.toList()) }
@@ -591,6 +703,18 @@ private fun RoomManageDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                FilledTonalButton(
+                    onClick = onCreateRoom,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("新建房间")
+                }
                 if (roomList.isEmpty()) {
                     Text("暂无房间", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
