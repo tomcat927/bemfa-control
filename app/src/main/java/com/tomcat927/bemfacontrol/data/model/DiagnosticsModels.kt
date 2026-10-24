@@ -1,11 +1,14 @@
 package com.tomcat927.bemfacontrol.data.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * 插座固件（chazuo main.ino dispatchTcpMessage）支持的诊断指令。
  * 查询类设备回复到 <topic>/up，巴法云把 /up 上报同步进主 topic 的 msg，
  * app 用 getmsg 拉主 topic 最新消息即可拿到回复。
  * 动作类只触发动作，部分有状态回复。
  */
+@Serializable
 enum class DeviceCommand(
     val msg: String,
     val label: String,
@@ -40,6 +43,7 @@ enum class DeviceCommand(
 }
 
 /** 单条诊断指令的执行结果。 */
+@Serializable
 data class DiagResult(
     val command: DeviceCommand,
     val raw: String,

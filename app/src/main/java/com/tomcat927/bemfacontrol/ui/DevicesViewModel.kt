@@ -16,6 +16,7 @@ import com.tomcat927.bemfacontrol.data.repository.UpdateRepository
 import com.tomcat927.bemfacontrol.data.model.ReleaseInfo
 import com.tomcat927.bemfacontrol.BuildConfig
 import com.tomcat927.bemfacontrol.data.settings.AppSettingsStore
+import com.tomcat927.bemfacontrol.data.settings.DiagCacheStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,6 +75,7 @@ class DevicesViewModel(
     private val settingsStore: AppSettingsStore,
     private val outletRepository: BemfaOutletRepository,
     private val updateRepository: UpdateRepository,
+    private val diagCacheStore: DiagCacheStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DevicesUiState(isLoading = true))
@@ -617,6 +619,13 @@ class DevicesViewModel(
     }
     fun showDiagnostics(visible: Boolean) {
         _uiState.update { it.copy(showDiagnostics = visible, diagMessage = null) }
+        if (visible) {
+            val topic = _uiState.value.selectedDeviceTopic ?: return
+            viewModelScope.launch {
+                val cached = runCatching { diagCacheStore.load(topic) }.getOrDefault(emptyMap())
+                _uiState.update { it.copy(diagResults = cached) }
+            }
+        }
     }
     fun runDiagQuery(command: DeviceCommand) {
         val uid = _uiState.value.uid
@@ -626,6 +635,7 @@ class DevicesViewModel(
             _uiState.update { it.copy(diagLoading = true, diagMessage = null) }
             runCatching { outletRepository.queryInfo(uid, topic, command) }
                 .onSuccess { result ->
+                    runCatching { diagCacheStore.save(topic, command, result) }
                     _uiState.update {
                         it.copy(
                             diagLoading = false,
@@ -686,10 +696,11 @@ class DevicesViewModel(
         private val settingsStore: AppSettingsStore,
         private val outletRepository: BemfaOutletRepository,
         private val updateRepository: UpdateRepository,
+        private val diagCacheStore: DiagCacheStore,
     ) : ViewModelProvider.Factory {
 
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            DevicesViewModel(settingsStore, outletRepository, updateRepository) as T
+            DevicesViewModel(settingsStore, outletRepository, updateRepository, diagCacheStore) as T
     }
 }

@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
                         settingsStore = container.settingsStore,
                         outletRepository = container.outletRepository,
                         updateRepository = container.updateRepository,
+                        diagCacheStore = container.diagCacheStore,
                     ),
                 )
                 DevicesScreen(viewModel = viewModel)
