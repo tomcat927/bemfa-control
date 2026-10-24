@@ -82,11 +82,11 @@ object DiagParser {
 
     /** UI 按固定顺序展示的字段名。 */
     fun displayKeys(command: DeviceCommand): List<String> = when (command) {
-        GET_VERSION -> listOf("version")
-        GET_MAC -> listOf("MAC")
-        GET_WIFI -> listOf("ssid", "rssi", "ip")
-        GET_CURRENT_TIME -> listOf("time", "timestamp", "synced")
-        GET_TIMERS_LOADED -> listOf("timers_loaded", "count")
+        DeviceCommand.GET_VERSION -> listOf("version")
+        DeviceCommand.GET_MAC -> listOf("MAC")
+        DeviceCommand.GET_WIFI -> listOf("ssid", "rssi", "ip")
+        DeviceCommand.GET_CURRENT_TIME -> listOf("time", "timestamp", "synced")
+        DeviceCommand.GET_TIMERS_LOADED -> listOf("timers_loaded", "count")
         else -> emptyList()
     }
 }
