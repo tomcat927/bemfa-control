@@ -1,6 +1,7 @@
 package com.tomcat927.bemfacontrol.data.network
 
 import com.tomcat927.bemfacontrol.data.model.BemfaMessageRequest
+import com.tomcat927.bemfacontrol.data.model.BemfaMessage
 import com.tomcat927.bemfacontrol.data.model.BemfaActionResponse
 import com.tomcat927.bemfacontrol.data.model.BemfaNameRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaChangeRoomRequest
@@ -34,6 +35,13 @@ interface BemfaApi {
     suspend fun postMessage(
         @Body request: BemfaMessageRequest,
     ): BemfaResponse<Int>
+    @GET("va/getmsg")
+    suspend fun getMessage(
+        @Query("uid") uid: String,
+        @Query("topic") topic: String,
+        @Query("type") type: Int,
+        @Query("num") num: Int = 1,
+    ): BemfaResponse<List<BemfaMessage>>
 
     @GET("va/online")
     suspend fun checkOnline(

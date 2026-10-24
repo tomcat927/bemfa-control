@@ -1,6 +1,8 @@
 package com.tomcat927.bemfacontrol.ui
 
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
+import com.tomcat927.bemfacontrol.data.model.DeviceCommand
+import com.tomcat927.bemfacontrol.data.model.DiagResult
 import com.tomcat927.bemfacontrol.data.model.BemfaRoom
 import com.tomcat927.bemfacontrol.data.model.BemfaTimer
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
@@ -59,6 +61,11 @@ data class DevicesUiState(
     val timerCountByTopic: Map<String, Int> = emptyMap(),
     val timerLoading: Boolean = false,
     val addingTimer: Boolean = false,
+    val showDiagnostics: Boolean = false,
+    val diagLoading: Boolean = false,
+    val diagResults: Map<DeviceCommand, DiagResult> = emptyMap(),
+    val diagMessage: String? = null,
+    val diagConfirmCommand: DeviceCommand? = null,
 )
 
 enum class ViewMode { ROOM, DEVICE }
@@ -113,7 +120,8 @@ class DevicesViewModel(
 
             _uiState.update { it.copy(needsSetup = false, uid = uid) }
             val order = settingsStore.roomOrder()
-            runCatching { outletRepository.groups(uid, order) }
+            val prevIsOn = _uiState.value.allDevices.associate { it.topic to it.isOn }
+            runCatching { outletRepository.groups(uid, order, prevIsOn) }
                 .onSuccess { groups ->
                     RuntimeLog.debug("sync success: ${groups.sumOf { it.devices.size }} devices")
                     val validSelectedRoom = _uiState.value.selectedRoom?.takeIf { room ->
@@ -606,6 +614,72 @@ class DevicesViewModel(
                     _uiState.update { it.copy(renamingRoom = false, message = throwable.message ?: "房间改名失败") }
                 }
         }
+    }
+    fun showDiagnostics(visible: Boolean) {
+        _uiState.update { it.copy(showDiagnostics = visible, diagMessage = null) }
+    }
+    fun runDiagQuery(command: DeviceCommand) {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(diagLoading = true, diagMessage = null) }
+            runCatching { outletRepository.queryInfo(uid, topic, command) }
+                .onSuccess { result ->
+                    _uiState.update {
+                        it.copy(
+                            diagLoading = false,
+                            diagResults = it.diagResults + (command to result),
+                            diagMessage = if (result.success) null else "未收到回复（设备可能离线或未及时响应）",
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("runDiagQuery failed: cmd=${command.msg}", throwable)
+                    _uiState.update {
+                        it.copy(diagLoading = false, diagMessage = throwable.message ?: "查询失败")
+                    }
+                }
+        }
+    }
+    fun requestDiagAction(command: DeviceCommand) {
+        _uiState.update { it.copy(diagConfirmCommand = command) }
+    }
+    fun confirmDiagAction() {
+        val command = _uiState.value.diagConfirmCommand ?: return
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) return
+        val topic = _uiState.value.selectedDeviceTopic ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(diagConfirmCommand = null, diagLoading = true, diagMessage = null) }
+            runCatching { outletRepository.sendCommand(uid, topic, command) }
+                .onSuccess {
+                    RuntimeLog.info("diagAction sent: cmd=${command.msg}")
+                    _uiState.update {
+                        it.copy(
+                            diagLoading = false,
+                            diagMessage = "${command.label} 指令已发送",
+                            diagResults = it.diagResults + (command to DiagResult(command, "", null, null, emptyMap(), true)),
+                        )
+                    }
+                    if (command == DeviceCommand.REBOOT) {
+                        kotlinx.coroutines.delay(3000)
+                        refreshSilently()
+                    }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("diagAction failed: cmd=${command.msg}", throwable)
+                    _uiState.update {
+                        it.copy(diagLoading = false, diagMessage = throwable.message ?: "指令发送失败")
+                    }
+                }
+        }
+    }
+    fun cancelDiagConfirm() {
+        _uiState.update { it.copy(diagConfirmCommand = null) }
+    }
+    fun clearDiagMessage() {
+        _uiState.update { it.copy(diagMessage = null) }
     }
 
     class Factory(

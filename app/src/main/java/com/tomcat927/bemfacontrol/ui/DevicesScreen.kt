@@ -56,6 +56,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import com.tomcat927.bemfacontrol.data.model.BemfaRoom
+import com.tomcat927.bemfacontrol.data.model.DeviceCommand
+import com.tomcat927.bemfacontrol.data.model.DiagParser
+import com.tomcat927.bemfacontrol.data.model.DiagResult
 import com.tomcat927.bemfacontrol.data.model.BemfaTimer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
@@ -111,6 +114,7 @@ private enum class DevicesPage {
     LIST,
     DETAIL,
     TIMER,
+    DIAGNOSTICS,
     SETTINGS,
 }
 
@@ -151,6 +155,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
         state.needsSetup -> DevicesPage.SETUP
         state.showSettings -> DevicesPage.SETTINGS
         selectedDevice != null && state.showTimerPage -> DevicesPage.TIMER
+        selectedDevice != null && state.showDiagnostics -> DevicesPage.DIAGNOSTICS
         selectedDevice != null -> DevicesPage.DETAIL
         else -> DevicesPage.LIST
     }
@@ -172,6 +177,9 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
         showAddTimerDialog = false
         editingTimer = null
         viewModel.showTimerPage(false)
+    }
+    BackHandler(enabled = currentPage == DevicesPage.DIAGNOSTICS) {
+        viewModel.showDiagnostics(false)
     }
 
     Scaffold(
@@ -268,6 +276,18 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         }
                     },
                 )
+                DevicesPage.DIAGNOSTICS -> TopAppBar(
+                    colors = appTopAppBarColors(),
+                    title = { Text("设备诊断") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.showDiagnostics(false) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                )
 
                 DevicesPage.SETTINGS -> TopAppBar(
                     colors = appTopAppBarColors(),
@@ -341,6 +361,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         editingTimer = null
                         viewModel.showTimerPage(true)
                     },
+                    onShowDiagnostics = { viewModel.showDiagnostics(true) },
                 )
 
                 DevicesPage.TIMER -> TimerContent(
@@ -352,6 +373,18 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                         editingTimer = timer
                         showAddTimerDialog = true
                     },
+                )
+                DevicesPage.DIAGNOSTICS -> DiagnosticsContent(
+                    deviceName = selectedDevice?.name.orEmpty(),
+                    results = state.diagResults,
+                    loading = state.diagLoading,
+                    message = state.diagMessage,
+                    confirmCommand = state.diagConfirmCommand,
+                    onQuery = viewModel::runDiagQuery,
+                    onAction = viewModel::requestDiagAction,
+                    onConfirm = viewModel::confirmDiagAction,
+                    onCancelConfirm = viewModel::cancelDiagConfirm,
+                    onDismissMessage = viewModel::clearDiagMessage,
                 )
 
                 DevicesPage.SETTINGS -> SettingsContent(
@@ -1438,6 +1471,7 @@ private fun DeviceDetailContent(
     onEditName: () -> Unit,
     onMoveRoom: () -> Unit,
     onShowTimer: () -> Unit,
+    onShowDiagnostics: () -> Unit,
 ) {
     if (device == null) {
         return
@@ -1585,6 +1619,14 @@ private fun DeviceDetailContent(
             modifier = Modifier.fillMaxWidth(),
             onClick = onShowTimer,
         ) { Text("定时任务") }
+        FilledTonalButton(
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onShowDiagnostics,
+        ) { Text("设备诊断") }
     }
 }
 
@@ -1848,5 +1890,207 @@ private fun EmptyContent(isLoading: Boolean) {
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
+}
+@Composable
+private fun DiagnosticsContent(
+    deviceName: String,
+    results: Map<DeviceCommand, DiagResult>,
+    loading: Boolean,
+    message: String?,
+    confirmCommand: DeviceCommand?,
+    onQuery: (DeviceCommand) -> Unit,
+    onAction: (DeviceCommand) -> Unit,
+    onConfirm: () -> Unit,
+    onCancelConfirm: () -> Unit,
+    onDismissMessage: () -> Unit,
+) {
+    if (loading) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        DiagSectionTitle("设备信息查询")
+        BemfaCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                DeviceCommand.entries.filter { !it.isAction }.forEach { cmd ->
+                    DiagRow(
+                        label = cmd.label,
+                        result = results[cmd],
+                        displayKeys = DiagParser.displayKeys(cmd),
+                        loading = loading,
+                        onQuery = { onQuery(cmd) },
+                    )
+                }
+            }
+        }
+        DiagSectionTitle("设备控制指令")
+        BemfaCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                DeviceCommand.entries.filter { it.isAction }.forEach { cmd ->
+                    DiagActionRow(
+                        label = cmd.label,
+                        danger = cmd == DeviceCommand.REBOOT || cmd == DeviceCommand.UPDATE,
+                        enabled = !loading,
+                        onClick = { onAction(cmd) },
+                    )
+                }
+            }
+        }
+    }
+    confirmCommand?.let { cmd ->
+        AlertDialog(
+            onDismissRequest = onCancelConfirm,
+            title = { Text(cmd.label) },
+            text = {
+                val hint = when (cmd) {
+                    DeviceCommand.REBOOT -> "设备将重启，期间会短暂离线，确认执行？"
+                    DeviceCommand.UPDATE -> "将使用设备已配置的固件地址执行 OTA 升级，期间请勿断电，确认执行？"
+                    DeviceCommand.TIMER_GET -> "立即从云端拉取定时任务列表？"
+                    DeviceCommand.NTP_SYNC -> "立即同步 NTP 时间？"
+                    else -> "确认执行 ${cmd.label}？"
+                }
+                Text(hint)
+            },
+            confirmButton = {
+                val danger = cmd == DeviceCommand.REBOOT || cmd == DeviceCommand.UPDATE
+                TextButton(
+                    onClick = onConfirm,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = if (danger) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    ),
+                ) { Text("执行") }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelConfirm) { Text("取消") }
+            },
+        )
+    }
+    if (message != null) {
+        AlertDialog(
+            onDismissRequest = onDismissMessage,
+            confirmButton = {
+                TextButton(onClick = onDismissMessage) { Text("知道了") }
+            },
+            text = { Text(message) },
+        )
+    }
+}
+@Composable
+private fun DiagSectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
+}
+@Composable
+private fun DiagRow(
+    label: String,
+    result: DiagResult?,
+    displayKeys: List<String>,
+    loading: Boolean,
+    onQuery: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            FilledTonalButton(
+                onClick = onQuery,
+                enabled = !loading,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            ) {
+                Text(if (loading && result == null) "查询中…" else "查询")
+            }
+        }
+        if (result != null) {
+            if (result.success) {
+                if (result.fields.isNotEmpty()) {
+                    displayKeys.forEach { key ->
+                        result.fields[key]?.let { value ->
+                            Text(
+                                text = "$key: $value",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = result.raw,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                result.time?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+            } else {
+                Text(
+                    text = "未收到回复",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun DiagActionRow(
+    label: String,
+    danger: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = if (danger) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            contentColor = if (danger) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        ),
+    ) {
+        Text(label)
     }
 }

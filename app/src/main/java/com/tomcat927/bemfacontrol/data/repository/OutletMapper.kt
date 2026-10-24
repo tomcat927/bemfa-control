@@ -24,6 +24,28 @@ object OutletMapper {
                 )
             }
             .sortedWith(compareBy({ it.room }, { it.name }, { it.topic }))
+    fun toOutletDevices(
+        topics: List<BemfaTopic>,
+        prevIsOn: Map<String, Boolean>,
+    ): List<OutletDevice> =
+        filterOutlets(topics)
+            .map { topic ->
+                OutletDevice(
+                    topic = topic.topic,
+                    name = topic.name.ifBlank { topic.topic },
+                    room = topic.room.ifBlank { "未分配房间" },
+                    isOnline = topic.online,
+                    isOn = resolveIsOn(topic, prevIsOn),
+                    lastMessageTime = topic.time,
+                )
+            }
+            .sortedWith(compareBy({ it.room }, { it.name }, { it.topic }))
+    private fun resolveIsOn(topic: BemfaTopic, prevIsOn: Map<String, Boolean>): Boolean =
+        when {
+            topic.msg.equals("on", ignoreCase = true) -> true
+            topic.msg.equals("off", ignoreCase = true) -> false
+            else -> prevIsOn[topic.topic] ?: false
+        }
 
     fun groupByRoom(devices: List<OutletDevice>, roomOrder: List<String> = emptyList()): List<DeviceGroup> {
         val grouped = devices

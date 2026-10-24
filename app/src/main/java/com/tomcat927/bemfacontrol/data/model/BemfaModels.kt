@@ -204,3 +204,9 @@ data class BemfaTimerToggleRequest(
     val type: Int = 3,
     val id: Int,
 )
+@Serializable
+data class BemfaMessage(
+    val msg: String = "",
+    val time: String? = null,
+    val unix: Long? = null,
+)

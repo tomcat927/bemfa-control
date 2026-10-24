@@ -2,6 +2,9 @@ package com.tomcat927.bemfacontrol.data.repository
 
 import com.tomcat927.bemfacontrol.diagnostics.RuntimeLog
 import com.tomcat927.bemfacontrol.data.model.BemfaMessageRequest
+import com.tomcat927.bemfacontrol.data.model.DeviceCommand
+import com.tomcat927.bemfacontrol.data.model.DiagParser
+import com.tomcat927.bemfacontrol.data.model.DiagResult
 import com.tomcat927.bemfacontrol.data.model.BemfaNameRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaChangeRoomRequest
 import com.tomcat927.bemfacontrol.data.model.BemfaTimer
@@ -12,6 +15,7 @@ import com.tomcat927.bemfacontrol.data.model.DeviceGroup
 import com.tomcat927.bemfacontrol.data.model.OutletDevice
 import com.tomcat927.bemfacontrol.data.network.BemfaApi
 import com.tomcat927.bemfacontrol.data.network.BemfaApiFactory
+import kotlinx.coroutines.delay
 
 class BemfaApiException(
     message: String,
@@ -22,12 +26,15 @@ class BemfaOutletRepository(
     private val api: BemfaApi,
 ) {
 
-    suspend fun outlets(uid: String): List<OutletDevice> {
+    suspend fun outlets(
+        uid: String,
+        prevIsOn: Map<String, Boolean> = emptyMap(),
+    ): List<OutletDevice> {
         val startedAt = System.currentTimeMillis()
         try {
             val response = api.allTopics(uid, BemfaApiFactory.tcpDeviceType())
             assertSuccess(response.code, response.message ?: response.msg)
-            val devices = OutletMapper.toOutletDevices(response.data?.topics.orEmpty())
+            val devices = OutletMapper.toOutletDevices(response.data?.topics.orEmpty(), prevIsOn)
             RuntimeLog.debug(
                 "allTopic success: ${devices.size} outlets in ${System.currentTimeMillis() - startedAt}ms",
             )
@@ -43,6 +50,12 @@ class BemfaOutletRepository(
 
     suspend fun groups(uid: String, roomOrder: List<String> = emptyList()): List<DeviceGroup> =
         OutletMapper.groupByRoom(outlets(uid), roomOrder)
+    suspend fun groups(
+        uid: String,
+        roomOrder: List<String> = emptyList(),
+        prevIsOn: Map<String, Boolean> = emptyMap(),
+    ): List<DeviceGroup> =
+        OutletMapper.groupByRoom(outlets(uid, prevIsOn), roomOrder)
 
     suspend fun checkOnline(uid: String, topic: String): Boolean {
         val startedAt = System.currentTimeMillis()
@@ -235,6 +248,54 @@ class BemfaOutletRepository(
             RuntimeLog.debug("deleteTimer success: topic=$topic id=$timerId in ${System.currentTimeMillis() - startedAt}ms")
         } catch (throwable: Throwable) {
             RuntimeLog.error("deleteTimer failed: topic=$topic id=$timerId", throwable)
+            throw throwable
+        }
+    }
+    suspend fun sendCommand(uid: String, topic: String, command: DeviceCommand): Boolean {
+        val startedAt = System.currentTimeMillis()
+        try {
+            val response = api.postMessage(
+                BemfaMessageRequest(uid, topic, BemfaApiFactory.tcpDeviceType(), command.msg),
+            )
+            assertSuccess(response.code, response.message ?: response.msg)
+            RuntimeLog.debug("sendCommand sent: topic=$topic cmd=${command.msg}")
+            return true
+        } catch (throwable: Throwable) {
+            RuntimeLog.error("sendCommand failed: topic=$topic cmd=${command.msg}", throwable)
+            throw throwable
+        }
+    }
+    suspend fun queryInfo(uid: String, topic: String, command: DeviceCommand): DiagResult {
+        val startedAt = System.currentTimeMillis()
+        try {
+            val baseline = runCatching { api.getMessage(uid, topic, BemfaApiFactory.tcpDeviceType(), 1) }
+                .getOrNull()?.data?.firstOrNull()?.unix ?: 0L
+            val response = api.postMessage(
+                BemfaMessageRequest(uid, topic, BemfaApiFactory.tcpDeviceType(), command.msg),
+            )
+            assertSuccess(response.code, response.message ?: response.msg)
+            RuntimeLog.debug("queryInfo sent: topic=$topic cmd=${command.msg} baseline=$baseline")
+            val deadline = startedAt + 8000
+            while (System.currentTimeMillis() < deadline) {
+                delay(800)
+                val latest = runCatching { api.getMessage(uid, topic, BemfaApiFactory.tcpDeviceType(), 1) }
+                    .getOrNull()?.data?.firstOrNull() ?: continue
+                if (DiagParser.isReplyTo(command, latest.msg) && (latest.unix ?: 0) > baseline) {
+                    RuntimeLog.debug("queryInfo reply: topic=$topic cmd=${command.msg} in ${System.currentTimeMillis() - startedAt}ms")
+                    return DiagResult(
+                        command = command,
+                        raw = latest.msg,
+                        time = latest.time,
+                        unix = latest.unix,
+                        fields = DiagParser.parse(latest.msg),
+                        success = true,
+                    )
+                }
+            }
+            RuntimeLog.info("queryInfo timeout: topic=$topic cmd=${command.msg} after ${System.currentTimeMillis() - startedAt}ms")
+            return DiagResult(command, "", null, null, emptyMap(), false)
+        } catch (throwable: Throwable) {
+            RuntimeLog.error("queryInfo failed: topic=$topic cmd=${command.msg}", throwable)
             throw throwable
         }
     }
