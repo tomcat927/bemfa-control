@@ -618,7 +618,13 @@ class DevicesViewModel(
         }
     }
     fun showDiagnostics(visible: Boolean) {
-        _uiState.update { it.copy(showDiagnostics = visible, diagMessage = null) }
+        _uiState.update {
+            it.copy(
+                showDiagnostics = visible,
+                diagMessage = null,
+                diagResults = emptyMap(),
+            )
+        }
         if (visible) {
             val topic = _uiState.value.selectedDeviceTopic ?: return
             viewModelScope.launch {
