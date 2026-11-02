@@ -48,6 +48,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -97,7 +99,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1660,6 +1665,17 @@ private fun SettingsContent(
                 ) {
                     var gistIdInput by remember(state.gistId) { mutableStateOf(state.gistId) }
                     var tokenInput by remember(state.hasGitHubToken) { mutableStateOf("") }
+                    var showToken by remember { mutableStateOf(false) }
+                    val tokenTransformation = if (showToken) {
+                        VisualTransformation.None
+                    } else {
+                        VisualTransformation { text ->
+                            TransformedText(
+                                text = AnnotatedString("*".repeat(text.length)),
+                                offsetMapping = OffsetMapping.Identity,
+                            )
+                        }
+                    }
 
                     OutlinedTextField(
                         value = gistIdInput,
@@ -1677,7 +1693,19 @@ private fun SettingsContent(
                         },
                         singleLine = true,
                         enabled = !state.gistConfiguring,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = tokenTransformation,
+                        trailingIcon = {
+                            IconButton(onClick = { showToken = !showToken }) {
+                                Icon(
+                                    imageVector = if (showToken) {
+                                        Icons.Filled.VisibilityOff
+                                    } else {
+                                        Icons.Filled.Visibility
+                                    },
+                                    contentDescription = if (showToken) "隐藏 Token" else "显示 Token",
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
@@ -1702,6 +1730,13 @@ private fun SettingsContent(
                     state.roomOrderSyncStatus?.let { status ->
                         Text(
                             text = status,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    state.roomOrderLastSyncTime?.let { time ->
+                        Text(
+                            text = "上次同步：$time",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

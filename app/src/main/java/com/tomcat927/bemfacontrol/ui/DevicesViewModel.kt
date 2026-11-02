@@ -50,6 +50,7 @@ data class DevicesUiState(
     val hasGitHubToken: Boolean = false,
     val gistConfiguring: Boolean = false,
     val roomOrderSyncStatus: String? = null,
+    val roomOrderLastSyncTime: String? = null,
     val autoUpdate: Boolean = true,
     val proxyFirst: Boolean = true,
     val updateChecking: Boolean = false,
@@ -417,7 +418,9 @@ class DevicesViewModel(
     private suspend fun applyRoomOrder(order: List<String>, updatedAt: Long) {
         if (order.isEmpty()) return
         settingsStore.setRoomOrder(order, updatedAt)
-        _uiState.update { it.copy(roomOrder = order) }
+        _uiState.update {
+            it.copy(roomOrder = order, roomOrderLastSyncTime = nowTimeString())
+        }
         refreshSilently()
     }
 
@@ -425,7 +428,12 @@ class DevicesViewModel(
         runCatching { roomOrderSyncRepository.save(order) }
             .onSuccess {
                 RuntimeLog.debug("room order pushed to gist")
-                _uiState.update { it.copy(roomOrderSyncStatus = "已同步到 Gist") }
+                _uiState.update {
+                    it.copy(
+                        roomOrderSyncStatus = "已同步到 Gist",
+                        roomOrderLastSyncTime = nowTimeString(),
+                    )
+                }
             }
             .onFailure { throwable ->
                 RuntimeLog.error("room order push failed", throwable)
@@ -434,6 +442,9 @@ class DevicesViewModel(
                 }
             }
     }
+
+    private fun nowTimeString(): String =
+        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date())
 
     fun setAutoUpdate(value: Boolean) {
         viewModelScope.launch {
