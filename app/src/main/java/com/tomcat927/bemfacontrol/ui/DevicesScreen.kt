@@ -99,9 +99,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1664,18 +1662,9 @@ private fun SettingsContent(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     var gistIdInput by remember(state.gistId) { mutableStateOf(state.gistId) }
-                    var tokenInput by remember(state.hasGitHubToken) { mutableStateOf("") }
+                    var tokenInput by remember(state.savedGithubToken) { mutableStateOf(state.savedGithubToken) }
                     var showToken by remember { mutableStateOf(false) }
-                    val tokenTransformation = if (showToken) {
-                        VisualTransformation.None
-                    } else {
-                        VisualTransformation { text ->
-                            TransformedText(
-                                text = AnnotatedString("*".repeat(text.length)),
-                                offsetMapping = OffsetMapping.Identity,
-                            )
-                        }
-                    }
+                    val tokenTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation()
 
                     OutlinedTextField(
                         value = gistIdInput,
@@ -1688,9 +1677,7 @@ private fun SettingsContent(
                     OutlinedTextField(
                         value = tokenInput,
                         onValueChange = { tokenInput = it },
-                        label = {
-                            Text(if (state.hasGitHubToken) "GitHub Token（留空沿用已保存）" else "GitHub Token")
-                        },
+                        label = { Text("GitHub Token") },
                         singleLine = true,
                         enabled = !state.gistConfiguring,
                         visualTransformation = tokenTransformation,

@@ -48,6 +48,7 @@ data class DevicesUiState(
     val showSettings: Boolean = false,
     val gistId: String = "",
     val hasGitHubToken: Boolean = false,
+    val savedGithubToken: String = "",
     val gistConfiguring: Boolean = false,
     val roomOrderSyncStatus: String? = null,
     val roomOrderLastSyncTime: String? = null,
@@ -97,6 +98,7 @@ class DevicesViewModel(
             val lastRoom = settingsStore.lastRoom()
             val gistId = settingsStore.gistId()
             val hasGitHubToken = settingsStore.githubToken().isNotBlank()
+            val savedGithubToken = settingsStore.githubToken()
             _uiState.update {
                 it.copy(
                     debugEnabled = enabled,
@@ -106,6 +108,7 @@ class DevicesViewModel(
                     selectedRoom = lastRoom,
                     gistId = gistId,
                     hasGitHubToken = hasGitHubToken,
+                    savedGithubToken = savedGithubToken,
                 )
             }
             if (settingsStore.autoUpdate()) {
@@ -355,10 +358,12 @@ class DevicesViewModel(
             runCatching { roomOrderSyncRepository.configure(gistId, token, settingsStore.roomOrder()) }
                 .onSuccess { savedGistId ->
                     RuntimeLog.info("room order gist configured")
+                    val storedToken = settingsStore.githubToken()
                     _uiState.update {
                         it.copy(
                             gistId = savedGistId,
                             hasGitHubToken = true,
+                            savedGithubToken = storedToken,
                             gistConfiguring = false,
                             roomOrderSyncStatus = "已连接",
                         )
