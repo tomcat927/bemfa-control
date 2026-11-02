@@ -12,6 +12,8 @@ import androidx.lifecycle.viewModelScope
 import com.tomcat927.bemfacontrol.data.model.DeviceGroup
 import com.tomcat927.bemfacontrol.data.repository.BemfaOutletRepository
 import com.tomcat927.bemfacontrol.data.repository.OutletMapper
+import com.tomcat927.bemfacontrol.data.repository.RoomOrderRemoteRead
+import com.tomcat927.bemfacontrol.data.repository.RoomOrderSyncRepository
 import com.tomcat927.bemfacontrol.data.repository.UpdateRepository
 import com.tomcat927.bemfacontrol.data.model.ReleaseInfo
 import com.tomcat927.bemfacontrol.BuildConfig
@@ -44,6 +46,10 @@ data class DevicesUiState(
     val showDebugDialog: Boolean = false,
     val detailLoading: Boolean = false,
     val showSettings: Boolean = false,
+    val gistId: String = "",
+    val hasGitHubToken: Boolean = false,
+    val gistConfiguring: Boolean = false,
+    val roomOrderSyncStatus: String? = null,
     val autoUpdate: Boolean = true,
     val proxyFirst: Boolean = true,
     val updateChecking: Boolean = false,
@@ -76,6 +82,7 @@ class DevicesViewModel(
     private val outletRepository: BemfaOutletRepository,
     private val updateRepository: UpdateRepository,
     private val diagCacheStore: DiagCacheStore,
+    private val roomOrderSyncRepository: RoomOrderSyncRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DevicesUiState(isLoading = true))
@@ -87,6 +94,8 @@ class DevicesViewModel(
             RuntimeLog.enabled = enabled
             val order = settingsStore.roomOrder()
             val lastRoom = settingsStore.lastRoom()
+            val gistId = settingsStore.gistId()
+            val hasGitHubToken = settingsStore.githubToken().isNotBlank()
             _uiState.update {
                 it.copy(
                     debugEnabled = enabled,
@@ -94,12 +103,15 @@ class DevicesViewModel(
                     proxyFirst = settingsStore.proxyFirst(),
                     roomOrder = order,
                     selectedRoom = lastRoom,
+                    gistId = gistId,
+                    hasGitHubToken = hasGitHubToken,
                 )
             }
             if (settingsStore.autoUpdate()) {
                 checkForUpdate()
             }
             refresh()
+            syncRoomOrder()
         }
     }
 
@@ -126,6 +138,10 @@ class DevicesViewModel(
             runCatching { outletRepository.groups(uid, order, prevIsOn) }
                 .onSuccess { groups ->
                     RuntimeLog.debug("sync success: ${groups.sumOf { it.devices.size }} devices")
+                    val latestOrder = _uiState.value.roomOrder.ifEmpty { order }
+                    val allDevices = groups.flatMap { it.devices }
+                    val rooms = groups.map { it.room }.distinct()
+                    val mergedOrder = mergeRoomOrder(latestOrder, rooms)
                     val validSelectedRoom = _uiState.value.selectedRoom?.takeIf { room ->
                         groups.any { group -> group.room == room }
                     }
@@ -136,10 +152,11 @@ class DevicesViewModel(
                             }
                     }
                     _uiState.update { state ->
-                        val allDevices = groups.flatMap { it.devices }
-                        val rooms = groups.map { it.room }.distinct()
-                        val mergedOrder = mergeRoomOrder(order, rooms)
-                        val orderedGroups = if (order != mergedOrder) OutletMapper.groupByRoom(allDevices, mergedOrder) else groups
+                        val orderedGroups = if (latestOrder != mergedOrder) {
+                            OutletMapper.groupByRoom(allDevices, mergedOrder)
+                        } else {
+                            groups
+                        }
                         state.copy(
                             isLoading = false,
                             groups = orderedGroups,
@@ -154,6 +171,10 @@ class DevicesViewModel(
                             },
                             message = null,
                         )
+                    }
+                    if (latestOrder != mergedOrder) {
+                        runCatching { settingsStore.setRoomOrder(mergedOrder) }
+                        runCatching { roomOrderSyncRepository.save(mergedOrder) }
                     }
                 }
                 .onFailure { throwable ->
@@ -320,6 +341,98 @@ class DevicesViewModel(
 
     fun showSettings(visible: Boolean) {
         _uiState.update { it.copy(showSettings = visible) }
+    }
+
+    fun saveGistConfig(gistId: String, token: String) {
+        if (token.isBlank() && !_uiState.value.hasGitHubToken) {
+            _uiState.update { it.copy(roomOrderSyncStatus = "请填写 GitHub Token") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(gistConfiguring = true, roomOrderSyncStatus = null) }
+            runCatching { roomOrderSyncRepository.configure(gistId, token, settingsStore.roomOrder()) }
+                .onSuccess { savedGistId ->
+                    RuntimeLog.info("room order gist configured")
+                    _uiState.update {
+                        it.copy(
+                            gistId = savedGistId,
+                            hasGitHubToken = true,
+                            gistConfiguring = false,
+                            roomOrderSyncStatus = "已连接",
+                        )
+                    }
+                    syncRoomOrder()
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("room order gist configure failed", throwable)
+                    _uiState.update {
+                        it.copy(
+                            gistConfiguring = false,
+                            roomOrderSyncStatus = throwable.message ?: "配置失败",
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun syncRoomOrder() {
+        viewModelScope.launch {
+            val localOrder = settingsStore.roomOrder()
+            val localUpdatedAt = settingsStore.roomOrderUpdatedAt()
+            runCatching { roomOrderSyncRepository.readRemote() }
+                .onSuccess { remote ->
+                    when (remote) {
+                        RoomOrderRemoteRead.NotConfigured -> {
+                            _uiState.update { it.copy(roomOrderSyncStatus = "未配置排序同步") }
+                        }
+
+                        RoomOrderRemoteRead.Missing -> {
+                            if (localOrder.isNotEmpty()) {
+                                pushRoomOrder(localOrder)
+                            } else {
+                                _uiState.update { it.copy(roomOrderSyncStatus = "云端暂无排序") }
+                            }
+                        }
+
+                        is RoomOrderRemoteRead.Available -> {
+                            val payload = remote.payload
+                            when {
+                                payload.order.isEmpty() && localOrder.isNotEmpty() -> pushRoomOrder(localOrder)
+                                localOrder.isEmpty() || localUpdatedAt >= payload.updatedAt -> applyRoomOrder(payload.order, payload.updatedAt)
+                                else -> pushRoomOrder(localOrder)
+                            }
+                        }
+                    }
+                }
+                .onFailure { throwable ->
+                    RuntimeLog.error("room order sync failed", throwable)
+                    _uiState.update {
+                        it.copy(roomOrderSyncStatus = throwable.message ?: "排序同步失败")
+                    }
+                }
+        }
+    }
+
+    private suspend fun applyRoomOrder(order: List<String>, updatedAt: Long) {
+        if (order.isEmpty()) return
+        settingsStore.setRoomOrder(order, updatedAt)
+        _uiState.update { it.copy(roomOrder = order) }
+        refreshSilently()
+    }
+
+    private suspend fun pushRoomOrder(order: List<String>) {
+        runCatching { roomOrderSyncRepository.save(order) }
+            .onSuccess {
+                RuntimeLog.debug("room order pushed to gist")
+                _uiState.update { it.copy(roomOrderSyncStatus = "已同步到 Gist") }
+            }
+            .onFailure { throwable ->
+                RuntimeLog.error("room order push failed", throwable)
+                _uiState.update {
+                    it.copy(roomOrderSyncStatus = throwable.message ?: "排序上传失败")
+                }
+            }
     }
 
     fun setAutoUpdate(value: Boolean) {
@@ -567,6 +680,7 @@ class DevicesViewModel(
             settingsStore.setRoomOrder(order)
             _uiState.update { it.copy(roomOrder = order) }
             refresh()
+            pushRoomOrder(order)
         }
     }
 
@@ -610,6 +724,7 @@ class DevicesViewModel(
                     settingsStore.setRoomOrder(newOrder)
                     _uiState.update { it.copy(renamingRoom = false, showRoomManage = false) }
                     refresh()
+                    pushRoomOrder(newOrder)
                 }
                 .onFailure { throwable ->
                     RuntimeLog.error("renameRoom failed: $oldRoom -> $trimmed", throwable)
@@ -703,10 +818,17 @@ class DevicesViewModel(
         private val outletRepository: BemfaOutletRepository,
         private val updateRepository: UpdateRepository,
         private val diagCacheStore: DiagCacheStore,
+        private val roomOrderSyncRepository: RoomOrderSyncRepository,
     ) : ViewModelProvider.Factory {
 
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            DevicesViewModel(settingsStore, outletRepository, updateRepository, diagCacheStore) as T
+            DevicesViewModel(
+                settingsStore,
+                outletRepository,
+                updateRepository,
+                diagCacheStore,
+                roomOrderSyncRepository,
+            ) as T
     }
 }

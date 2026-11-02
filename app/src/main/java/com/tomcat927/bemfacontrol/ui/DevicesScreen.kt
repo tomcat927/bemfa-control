@@ -97,6 +97,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -392,6 +393,7 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     onAutoUpdateChange = viewModel::setAutoUpdate,
                     onProxyFirstChange = viewModel::setProxyFirst,
                     onCheckUpdate = viewModel::checkForUpdate,
+                    onGistConfigSave = viewModel::saveGistConfig,
                 )
             }
 
@@ -1637,6 +1639,7 @@ private fun SettingsContent(
     onAutoUpdateChange: (Boolean) -> Unit,
     onProxyFirstChange: (Boolean) -> Unit,
     onCheckUpdate: () -> Unit,
+    onGistConfigSave: (String, String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1645,6 +1648,66 @@ private fun SettingsContent(
     ) {
         item {
             Text("更新", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+        item {
+            Text("排序同步", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+        item {
+            BemfaCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    var gistIdInput by remember(state.gistId) { mutableStateOf(state.gistId) }
+                    var tokenInput by remember(state.hasGitHubToken) { mutableStateOf("") }
+
+                    OutlinedTextField(
+                        value = gistIdInput,
+                        onValueChange = { gistIdInput = it },
+                        label = { Text("Gist ID（留空自动创建）") },
+                        singleLine = true,
+                        enabled = !state.gistConfiguring,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = tokenInput,
+                        onValueChange = { tokenInput = it },
+                        label = {
+                            Text(if (state.hasGitHubToken) "GitHub Token（留空沿用已保存）" else "GitHub Token")
+                        },
+                        singleLine = true,
+                        enabled = !state.gistConfiguring,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = "建议使用勾选 gist 权限的 classic token，Token 只保存在本机。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = { onGistConfigSave(gistIdInput, tokenInput) },
+                        enabled = !state.gistConfiguring && (state.hasGitHubToken || tokenInput.isNotBlank()),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (state.gistConfiguring) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("保存并同步")
+                        }
+                    }
+                    state.roomOrderSyncStatus?.let { status ->
+                        Text(
+                            text = status,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
         item {
             BemfaCard(modifier = Modifier.fillMaxWidth()) {

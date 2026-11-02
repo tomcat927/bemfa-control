@@ -3,6 +3,7 @@ package com.tomcat927.bemfacontrol.data.settings
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -21,7 +22,10 @@ class AppSettingsStore(private val context: Context) {
     private val autoUpdateKey = booleanPreferencesKey("auto_update")
     private val proxyFirstKey = booleanPreferencesKey("proxy_first")
     private val roomOrderKey = stringPreferencesKey("room_order")
+    private val roomOrderUpdatedAtKey = longPreferencesKey("room_order_updated_at")
     private val lastRoomKey = stringPreferencesKey("last_selected_room")
+    private val gistIdKey = stringPreferencesKey("room_order_gist_id")
+    private val githubTokenKey = stringPreferencesKey("room_order_github_token")
 
     private val roomOrderJson = Json { encodeDefaults = true }
 
@@ -77,10 +81,37 @@ class AppSettingsStore(private val context: Context) {
 
     suspend fun roomOrder(): List<String> = roomOrderFlow().first()
 
-    suspend fun setRoomOrder(order: List<String>) {
+    suspend fun roomOrderUpdatedAt(): Long =
+        context.settingsDataStore.data.map { preferences ->
+            preferences[roomOrderUpdatedAtKey] ?: 0L
+        }.first()
+
+    suspend fun setRoomOrder(order: List<String>, updatedAt: Long = System.currentTimeMillis()) {
         val encoded = roomOrderJson.encodeToString(ListSerializer(String.serializer()), order)
         context.settingsDataStore.edit { preferences ->
             preferences[roomOrderKey] = encoded
+            preferences[roomOrderUpdatedAtKey] = updatedAt
+        }
+    }
+
+    suspend fun gistId(): String = context.settingsDataStore.data.map { preferences ->
+        preferences[gistIdKey].orEmpty()
+    }.first()
+
+    suspend fun githubToken(): String = context.settingsDataStore.data.map { preferences ->
+        preferences[githubTokenKey].orEmpty()
+    }.first()
+
+    suspend fun gistConfig(): Pair<String, String>? = context.settingsDataStore.data.map { preferences ->
+        val id = preferences[gistIdKey].orEmpty().trim()
+        val token = preferences[githubTokenKey].orEmpty().trim()
+        if (id.isBlank() || token.isBlank()) null else id to token
+    }.first()
+
+    suspend fun setGistConfig(gistId: String, token: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[gistIdKey] = gistId.trim()
+            preferences[githubTokenKey] = token.trim()
         }
     }
 

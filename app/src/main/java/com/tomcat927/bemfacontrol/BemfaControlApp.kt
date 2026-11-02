@@ -4,6 +4,7 @@ import android.app.Application
 import com.tomcat927.bemfacontrol.data.network.BemfaApiFactory
 import com.tomcat927.bemfacontrol.data.network.GitHubApiFactory
 import com.tomcat927.bemfacontrol.data.repository.BemfaOutletRepository
+import com.tomcat927.bemfacontrol.data.repository.RoomOrderSyncRepository
 import com.tomcat927.bemfacontrol.data.repository.UpdateRepository
 import com.tomcat927.bemfacontrol.data.settings.AppSettingsStore
 import com.tomcat927.bemfacontrol.data.settings.DiagCacheStore
@@ -20,7 +21,9 @@ class BemfaControlApp : Application() {
 
 class AppContainer(application: Application) {
     val settingsStore = AppSettingsStore(application)
+    private val gitHubApi = GitHubApiFactory.create()
     val outletRepository = BemfaOutletRepository(BemfaApiFactory.create())
     val diagCacheStore = DiagCacheStore(application)
-    val updateRepository = UpdateRepository(application, GitHubApiFactory.create())
+    val updateRepository = UpdateRepository(application, gitHubApi)
+    val roomOrderSyncRepository = RoomOrderSyncRepository(gitHubApi, settingsStore)
 }
